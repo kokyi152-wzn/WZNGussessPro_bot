@@ -11,11 +11,9 @@ from predictions import (
 
 logging.basicConfig(level=logging.INFO)
 
-# ---- Global Predictor Instances ----
 lottery_predictor = LotteryPredictor()
 football_predictor = FootballPredictor()
 
-# ---- Keyboard ----
 def get_main_keyboard():
     keyboard = [
         [InlineKeyboardButton("⚽ ဘောလုံးခန့်မှန်း", callback_data="football")],
@@ -30,14 +28,12 @@ def get_main_keyboard():
     ]
     return InlineKeyboardMarkup(keyboard)
 
-# ---- /start ----
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     add_user(user.id, user.username, user.first_name)
     text = f"မင်္ဂလာပါ {user.first_name}!\n\nဒီ Bot က ဘောလုံးပွဲ၊ ထိုင်းထီနဲ့ လာအိုထီတွေကို ခန့်မှန်းပေးပါတယ်။\nအောက်က ခလုတ်တွေနဲ့ ရွေးချယ်ပါ။"
     await update.message.reply_text(text, reply_markup=get_main_keyboard())
 
-# ---- Button Handler ----
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -123,7 +119,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         await query.edit_message_text(text, reply_markup=get_main_keyboard())
 
-# ---- Admin Commands ----
 async def add_premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID: return
     try:
@@ -182,20 +177,17 @@ async def search_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if pkg in ["laos", "both"]: text += f"🇱🇦 {res['laos']}"
     await update.message.reply_text(text)
 
-# ---- Main ----
 def main():
-    application = Application.builder().token(BOT_TOKEN).build()
-    
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("addpremium", add_premium))
-    application.add_handler(CommandHandler("removepremium", remove_premium))
-    application.add_handler(CommandHandler("addhistory", add_history))
-    application.add_handler(CommandHandler("setresult", set_result))
-    application.add_handler(CommandHandler("search", search_history))
-    application.add_handler(CallbackQueryHandler(button_handler))
-    
+    app = Application.builder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("addpremium", add_premium))
+    app.add_handler(CommandHandler("removepremium", remove_premium))
+    app.add_handler(CommandHandler("addhistory", add_history))
+    app.add_handler(CommandHandler("setresult", set_result))
+    app.add_handler(CommandHandler("search", search_history))
+    app.add_handler(CallbackQueryHandler(button_handler))
     print("Bot is starting...")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
     main()
