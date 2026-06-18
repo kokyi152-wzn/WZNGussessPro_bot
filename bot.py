@@ -31,7 +31,6 @@ async def start_health_server():
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
     print(f"✅ Health check server running on port {port}")
-    # Keep the server running forever
     await asyncio.Event().wait()
 
 # ---- Keyboard ----
@@ -277,9 +276,11 @@ async def search_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(text)
 
 # ---- Main ----
-async def main():
+def main():
     # Health check server ကို နောက်ခံမှာ စတင်ပါ
-    health_task = asyncio.create_task(start_health_server())
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.create_task(start_health_server())
     
     # Bot ကို စတင်ပါ
     application = Application.builder().token(BOT_TOKEN).build()
@@ -292,7 +293,7 @@ async def main():
     application.add_handler(CallbackQueryHandler(button_handler))
     
     print("Bot is starting...")
-    await application.run_polling(allowed_updates=Update.ALL_TYPES)
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
