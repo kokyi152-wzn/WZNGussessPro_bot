@@ -1,6 +1,8 @@
 import logging
 import os
+import asyncio
 from datetime import datetime
+from aiohttp import web
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 from config import BOT_TOKEN, ADMIN_ID
@@ -15,6 +17,24 @@ logging.basicConfig(level=logging.INFO)
 lottery_predictor = LotteryPredictor()
 football_predictor = FootballPredictor()
 
+# ---- Health Check Server ----
+async def health_check(request):
+    return web.Response(text="OK", status=200)
+
+async def start_health_server():
+    app = web.Application()
+    app.router.add_get('/', health_check)
+    app.router.add_get('/health', health_check)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.environ.get('PORT', 8080))
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    await site.start()
+    print(f"✅ Health check server running on port {port}")
+    # Keep the server running forever
+    await asyncio.Event().wait()
+
+# ---- Keyboard ----
 def get_main_keyboard():
     keyboard = [
         [InlineKeyboardButton("⚽ ဘောလုံးခန့်မှန်း", callback_data="football")],
@@ -29,6 +49,7 @@ def get_main_keyboard():
     ]
     return InlineKeyboardMarkup(keyboard)
 
+# ---- /start ----
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     add_user(user.id, user.username, user.first_name)
@@ -40,6 +61,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(text, reply_markup=get_main_keyboard())
 
+# ---- Button Handler ----
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -154,6 +176,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="Markdown"
             )
 
+# ---- Admin Commands ----
 async def add_premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("⛔ Admin မဟုတ်ပါ။")
@@ -228,17 +251,25 @@ async def search_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text += f"🇱🇦 {res['laos']}"
     await update.message.reply_text(text)
 
+# ---- Main ----
 def main():
-    app = Application.builder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("addpremium", add_premium))
-    app.add_handler(CommandHandler("removepremium", remove_premium))
-    app.add_handler(CommandHandler("addhistory", add_history))
-    app.add_handler(CommandHandler("setresult", set_result))
-    app.add_handler(CommandHandler("search", search_history))
-    app.add_handler(CallbackQueryHandler(button_handler))
+    # Health check server ကို နောက်ခံမှာ စတင်ပါ
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.create_task(start_health_server())
+    
+    # Bot ကို စတင်ပါ
+    application = Application.builder().token(BOT_TOKEN).build()
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("addpremium", add_premium))
+    application.add_handler(CommandHandler("removepremium", remove_premium))
+    application.add_handler(CommandHandler("addhistory", add_history))
+    application.add_handler(CommandHandler("setresult", set_result))
+    application.add_handler(CommandHandler("search", search_history))
+    application.add_handler(CallbackQueryHandler(button_handler))
+    
     print("Bot is starting...")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
     main()
