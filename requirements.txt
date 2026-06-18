@@ -1,0 +1,10 @@
+python-telegram-bot[job-queue]==20.7
+pymongo
+requests
+python-dotenv
+aiohttp
+beautifulsoup4
+lxml
+apscheduler
+scikit-learn
+numpy
