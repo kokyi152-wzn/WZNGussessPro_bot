@@ -14,8 +14,6 @@ logging.basicConfig(level=logging.INFO)
 # ---- Global Predictor Instances ----
 lottery_predictor = LotteryPredictor()
 football_predictor = FootballPredictor()
-# ပထမဆုံး အကြိမ် စမ်းသပ်လေ့ကျင့်ခြင်း (Optional)
-# football_predictor.train()
 
 # ---- Keyboard ----
 def get_main_keyboard():
@@ -50,7 +48,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not can_access(user_id, "thai"):
             await query.edit_message_text("⛔ ထိုင်းထီ Package မရှိသေးပါ။", reply_markup=get_main_keyboard())
             return
-        # ခန့်မှန်းချက်ကို နည်းလမ်းနှစ်ခုနဲ့ ပြမယ် (ရိုးရိုး + Advanced)
         basic_pred = get_lottery_predictions()
         advanced_pred = lottery_predictor.predict()
         text = f"🇹🇭 **ထိုင်းထီခန့်မှန်း**\n\n📊 Basic: `{basic_pred['thai']}`\n🧠 Advanced: `{advanced_pred}`"
@@ -69,7 +66,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text("⛔ Full Package မရှိသေးပါ။", reply_markup=get_main_keyboard())
             return
         preds = get_football_predictions()
-        # Heuristic နဲ့မောင်းထားတယ်
         text = "⚽ **ဘောလုံးခန့်မှန်း**\n" + "\n".join(preds)
         await query.edit_message_text(text, reply_markup=get_main_keyboard())
 
@@ -190,18 +186,16 @@ async def search_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     application = Application.builder().token(BOT_TOKEN).build()
     
-    # Command Handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("addpremium", add_premium))
     application.add_handler(CommandHandler("removepremium", remove_premium))
     application.add_handler(CommandHandler("addhistory", add_history))
     application.add_handler(CommandHandler("setresult", set_result))
     application.add_handler(CommandHandler("search", search_history))
-    
-    # Callback Handler
     application.add_handler(CallbackQueryHandler(button_handler))
     
-    # Polling
     print("Bot is starting...")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
+
+if __name__ == "__main__":
     main()
