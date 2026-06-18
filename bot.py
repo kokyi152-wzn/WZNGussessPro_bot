@@ -1,8 +1,9 @@
 import logging
 import os
-import asyncio
+import threading
+import time
 from datetime import datetime, timedelta
-from aiohttp import web
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 from config import BOT_TOKEN, ADMIN_ID
@@ -10,7 +11,7 @@ from database import add_user, get_package, set_package, can_access, get_history
 from predictions import (
     get_football_predictions, get_today_fixtures,
     get_thai_lottery_predictions, get_laos_lottery_predictions,
-    get_next_thai_draw_date, get_next_laos_draw_date,
+    get_thai_calendar, get_laos_calendar,
     get_lottery_results, set_lottery_result_admin, LotteryPredictor, FootballPredictor
 )
 
@@ -19,21 +20,23 @@ logging.basicConfig(level=logging.INFO)
 lottery_predictor = LotteryPredictor()
 football_predictor = FootballPredictor()
 
-# ---- Health Check Server ----
-async def health_check(request):
-    return web.Response(text="OK", status=200)
+# ---- Health Check Server (HTTP Server - Thread) ----
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path in ['/', '/health']:
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain')
+            self.end_headers()
+            self.wfile.write(b'OK')
+        else:
+            self.send_response(404)
+            self.end_headers()
 
-async def start_health_server():
-    app = web.Application()
-    app.router.add_get('/', health_check)
-    app.router.add_get('/health', health_check)
-    runner = web.AppRunner(app)
-    await runner.setup()
+def run_health_server():
     port = int(os.environ.get('PORT', 8080))
-    site = web.TCPSite(runner, '0.0.0.0', port)
-    await site.start()
+    server = HTTPServer(('0.0.0.0', port), HealthHandler)
     print(f"✅ Health check server running on port {port}")
-    await asyncio.Event().wait()
+    server.serve_forever()
 
 # ---- Keyboard ----
 def get_main_keyboard():
@@ -42,6 +45,8 @@ def get_main_keyboard():
         [InlineKeyboardButton("📅 ယနေ့ပွဲစဉ်စာရင်း", callback_data="fixtures")],
         [InlineKeyboardButton("🇹🇭 ထိုင်းထီခန့်မှန်း (ထိပ်ဆုံး ၅)", callback_data="lottery_thai")],
         [InlineKeyboardButton("🇱🇦 လာအိုထီခန့်မှန်း (ထိပ်ဆုံး ၅)", callback_data="lottery_laos")],
+        [InlineKeyboardButton("📅 ထိုင်းထီကလင်ဒါ", callback_data="calendar_thai")],
+        [InlineKeyboardButton("📅 လာအိုထီကလင်ဒါ", callback_data="calendar_laos")],
         [InlineKeyboardButton("📊 ဒီနေ့ထီထွက်ရလဒ်", callback_data="lottery_result")],
         [InlineKeyboardButton("💎 Premium ဝယ်ယူရန်", callback_data="premium_info")]
     ]
@@ -66,30 +71,54 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     data = query.data
 
-    # ---- ထိုင်းထီခန့်မှန်း (အကောင်းဆုံး ၅) ----
+    # ---- ထိုင်းထီခန့်မှန်း (ထိပ်ဆုံး ၅) ----
     if data == "lottery_thai":
         if not can_access(user_id, "thai"):
             await query.edit_message_text("⛔ ထိုင်းထီ Package မရှိသေးပါ။", reply_markup=get_main_keyboard())
             return
         predictions = get_thai_lottery_predictions()
-        next_date = get_next_thai_draw_date()
-        text = f"🇹🇭 **ထိုင်းထီခန့်မှန်း (ထိပ်ဆုံး ၅)**\n📅 {next_date} အတွက်\n\n"
+        today = datetime.now().strftime("%Y-%m-%d")
+        text = f"🇹🇭 **ထိုင်းထီခန့်မှန်း (ထိပ်ဆုံး ၅)**\n📅 {today} အတွက်\n\n"
         for p in predictions:
-            emoji = "🥇" if p["rank"] == 1 else "🥈" if p["rank"] == 2 else "🥉" if p["rank"] == 3 else f"{p['rank']}️⃣"
-            text += f"{emoji} နံပါတ် {p['rank']} အကောင်းဆုံး: `{p['number']}` (၆လုံး)\n   ယုံကြည်မှု: {p['confidence']}\n\n"
+            emoji = "🥇" if p["rank"] == 1 else "🥈" if p["rank"] == 2 else "🥉" if p["rank"] == 3 else f"#{p['rank']}"
+            text += f"{emoji} `{p['number']}` (၆လုံး) - ယုံကြည်မှု: {p['confidence']}\n"
         await query.edit_message_text(text, reply_markup=get_main_keyboard())
 
-    # ---- လာအိုထီခန့်မှန်း (အကောင်းဆုံး ၅) ----
+    # ---- လာအိုထီခန့်မှန်း (ထိပ်ဆုံး ၅) ----
     elif data == "lottery_laos":
         if not can_access(user_id, "laos"):
             await query.edit_message_text("⛔ လာအိုထီ Package မရှိသေးပါ။", reply_markup=get_main_keyboard())
             return
         predictions = get_laos_lottery_predictions()
-        next_date = get_next_laos_draw_date()
-        text = f"🇱🇦 **လာအိုထီခန့်မှန်း (ထိပ်ဆုံး ၅)**\n📅 {next_date} အတွက်\n\n"
+        today = datetime.now().strftime("%Y-%m-%d")
+        text = f"🇱🇦 **လာအိုထီခန့်မှန်း (ထိပ်ဆုံး ၅)**\n📅 {today} အတွက်\n\n"
         for p in predictions:
-            emoji = "🥇" if p["rank"] == 1 else "🥈" if p["rank"] == 2 else "🥉" if p["rank"] == 3 else f"{p['rank']}️⃣"
-            text += f"{emoji} နံပါတ် {p['rank']} အကောင်းဆုံး: `{p['number']}` (၄လုံး)\n   ယုံကြည်မှု: {p['confidence']}\n\n"
+            emoji = "🥇" if p["rank"] == 1 else "🥈" if p["rank"] == 2 else "🥉" if p["rank"] == 3 else f"#{p['rank']}"
+            text += f"{emoji} `{p['number']}` (၄လုံး) - ယုံကြည်မှု: {p['confidence']}\n"
+        await query.edit_message_text(text, reply_markup=get_main_keyboard())
+
+    # ---- ထိုင်းထီကလင်ဒါ ----
+    elif data == "calendar_thai":
+        if not can_access(user_id, "thai"):
+            await query.edit_message_text("⛔ ထိုင်းထီ Package မရှိသေးပါ။", reply_markup=get_main_keyboard())
+            return
+        dates = get_thai_calendar()
+        text = "📅 **ထိုင်းထီထွက်မယ့်ရက်များ**\n\n"
+        text += "🗓️ ထိုင်းထီက လ၁ရက်နဲ့ ၁၆ရက်တွေမှာ ထွက်ပါတယ်။\n\n"
+        for d in dates:
+            text += f"📌 {d}\n"
+        await query.edit_message_text(text, reply_markup=get_main_keyboard())
+
+    # ---- လာအိုထီကလင်ဒါ ----
+    elif data == "calendar_laos":
+        if not can_access(user_id, "laos"):
+            await query.edit_message_text("⛔ လာအိုထီ Package မရှိသေးပါ။", reply_markup=get_main_keyboard())
+            return
+        dates = get_laos_calendar()
+        text = "📅 **လာအိုထီထွက်မယ့်ရက်များ**\n\n"
+        text += "🗓️ လာအိုထီက တနင်္လာကနေ သောကြာအထိ နေ့စဉ်ထွက်ပါတယ်။\n\n"
+        for d in dates:
+            text += f"📌 {d}\n"
         await query.edit_message_text(text, reply_markup=get_main_keyboard())
 
     # ---- ဘောလုံး ----
@@ -253,9 +282,12 @@ async def search_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(text)
 
 # ---- Main ----
-async def main():
-    health_task = asyncio.create_task(start_health_server())
+def main():
+    # Health check server ကို Thread နဲ့ စတင်ပါ
+    health_thread = threading.Thread(target=run_health_server, daemon=True)
+    health_thread.start()
     
+    # Bot ကို စတင်ပါ
     application = Application.builder().token(BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("addpremium", add_premium))
@@ -266,7 +298,7 @@ async def main():
     application.add_handler(CallbackQueryHandler(button_handler))
     
     print("Bot is starting...")
-    await application.run_polling(allowed_updates=Update.ALL_TYPES)
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
