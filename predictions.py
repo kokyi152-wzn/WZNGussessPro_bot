@@ -1,23 +1,64 @@
-# predictions.py (အသစ်ပြင်ဆင်ထားတဲ့ဟာ)
-
 import random
 import requests
 from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
-from config import FOOTBALL_API_KEY  # ဒီဟာက football-data.org key ဖြစ်မယ်
+from config import FOOTBALL_API_KEY
 
-# ---- ထီပိုင်း (အရင်အတိုင်း) ----
+# ---- ထီပိုင်း ----
 def get_lottery_predictions():
     return {
         "thai": f"{random.randint(0, 999):03d}",
         "laos": f"{random.randint(0, 99):02d}"
     }
 
-# ---- ဘောလုံးခန့်မှန်းချက် (football-data.org သုံးမယ်) ----
+# ---- Admin ထည့်တဲ့ ထီရလဒ် Cache ----
+_admin_lottery_cache = {
+    "thai": None,
+    "laos": None,
+    "date": None
+}
+
+def set_lottery_result_admin(thai_num, laos_num):
+    _admin_lottery_cache["thai"] = thai_num
+    _admin_lottery_cache["laos"] = laos_num
+    _admin_lottery_cache["date"] = datetime.now().strftime("%Y-%m-%d")
+
+def get_lottery_results():
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    if _admin_lottery_cache["date"] == today_str and _admin_lottery_cache["thai"] and _admin_lottery_cache["laos"]:
+        return {
+            "thai": _admin_lottery_cache["thai"],
+            "laos": _admin_lottery_cache["laos"],
+            "source": "Admin မှသတ်မှတ်သည်"
+        }
+    # Scraping ကြိုးစားမယ်
+    try:
+        url = "https://www.glomyanmar.com/category/laos-lottery/"
+        headers = {"User-Agent": "Mozilla/5.0"}
+        resp = requests.get(url, timeout=10)
+        if resp.status_code == 200:
+            soup = BeautifulSoup(resp.text, 'html.parser')
+            # ဒီနေရာမှာ ခင်ဗျား ကိုယ်တိုင် ပြင်ရမယ်။
+            thai_num = soup.find("div", class_="lotto-number")
+            if thai_num:
+                return {
+                    "thai": thai_num.text.strip()[:3],
+                    "laos": "၀၀",
+                    "source": "Website (Scraped)"
+                }
+    except Exception as e:
+        print(f"Scraping Error: {e}")
+    
+    # နောက်ဆုံး ကျပန်း
+    return {
+        "thai": f"{random.randint(0, 999):03d}",
+        "laos": f"{random.randint(0, 99):02d}",
+        "source": "ခန့်မှန်းချက် (အာမခံချက်မရှိ)"
+    }
+
+# ---- ဘောလုံးခန့်မှန်း (FOOTBALL_API_KEY သုံးမယ်) ----
 def get_football_predictions():
     matches = []
-    
-    # football-data.org API ကို သုံးမယ်
     if FOOTBALL_API_KEY:
         try:
             url = "https://api.football-data.org/v4/matches"
@@ -28,26 +69,20 @@ def get_football_predictions():
                 for match in data.get("matches", [])[:5]:
                     home = match["homeTeam"]["name"]
                     away = match["awayTeam"]["name"]
-                    # ရိုးရိုး heuristic နဲ့ ခန့်မှန်းမယ်
                     rand = random.random()
                     if rand < 0.4:
-                        prediction = f"🏠 {home} နိုင်"
+                        pred = f"🏠 {home} နိုင်"
                     elif rand < 0.7:
-                        prediction = f"✈️ {away} နိုင်"
+                        pred = f"✈️ {away} နိုင်"
                     else:
-                        prediction = "🤝 သရေ"
-                    matches.append(f"{home} vs {away} -> {prediction}")
+                        pred = "🤝 သရေ"
+                    matches.append(f"{home} vs {away} -> {pred}")
                 return matches
         except Exception as e:
-            print(f"API Error: {e}")
-    
-    # API မရရင် Mock Data
-    mock_matches = [
-        ("မန်ယူ", "အာဆင်နယ်"),
-        ("လီဗာပူး", "မန်စီးတီး"),
-        ("ဘိုင်ယန်မြူးနစ်", "ဒေါ့မွန်"),
-    ]
-    for home, away in mock_matches:
+            print(f"Football API Error: {e}")
+    # Mock Data
+    mock = [("မန်ယူ", "အာဆင်နယ်"), ("လီဗာပူး", "မန်စီးတီး"), ("ဘိုင်ယန်", "ဒေါ့မွန်")]
+    for home, away in mock:
         rand = random.random()
         if rand < 0.4:
             pred = f"🏠 {home} နိုင်"
@@ -58,15 +93,14 @@ def get_football_predictions():
         matches.append(f"{home} vs {away} -> {pred}")
     return matches
 
-# ---- ယနေ့ပွဲစဉ်စာရင်း (football-data.org သုံးမယ်) ----
+# ---- ယနေ့ပွဲစဉ် (FOOTBALL_API_KEY သုံးမယ်) ----
 def get_today_fixtures():
     today = datetime.now().strftime("%Y-%m-%d")
     tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
     matches = []
-    
     if FOOTBALL_API_KEY:
         try:
-            url = f"https://api.football-data.org/v4/matches"
+            url = "https://api.football-data.org/v4/matches"
             params = {"dateFrom": today, "dateTo": tomorrow, "limit": 10}
             headers = {"X-Auth-Token": FOOTBALL_API_KEY}
             resp = requests.get(url, headers=headers, params=params, timeout=10)
@@ -79,9 +113,8 @@ def get_today_fixtures():
                     matches.append(f"🆚 {home} vs {away}\n   ⏰ {time} UTC")
                 return matches if matches else ["ယနေ့ပွဲစဉ် မရှိသေးပါ"]
         except Exception as e:
-            print(f"Fixtures API Error: {e}")
-    
-    # Mock Data
+            print(f"Fixtures Error: {e}")
+    # Mock
     mock = [("မန်ယူ", "အာဆင်နယ်", "20:00"), ("လီဗာပူး", "မန်စီးတီး", "22:00")]
     for home, away, t in mock:
         matches.append(f"🆚 {home} vs {away}\n   ⏰ မြန်မာချိန် {t}")
