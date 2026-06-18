@@ -15,11 +15,63 @@ def set_lottery_result_admin(thai_num, laos_num):
     _admin_lottery_cache["laos"] = laos_num
     _admin_lottery_cache["date"] = datetime.now().strftime("%Y-%m-%d")
 
-def get_lottery_predictions():
-    return {
-        "thai": f"{random.randint(0, 999):03d}",
-        "laos": f"{random.randint(0, 99):02d}"
-    }
+# ---- ထိုင်းထီခန့်မှန်း (အကောင်းဆုံး ၁၀) ----
+def get_thai_lottery_predictions():
+    """ထိုင်းထီအတွက် အကောင်းဆုံး နံပါတ် ၁ ကနေ ၁၀ အထိ ပြန်ပေးမယ်"""
+    predictions = []
+    # ထိုင်းထီက ၆ လုံး
+    for i in range(1, 11):
+        num = f"{random.randint(0, 999999):06d}"
+        predictions.append({
+            "rank": i,
+            "number": num,
+            "confidence": random.choice(["အလွန်ကောင်း", "ကောင်း", "အတန်အသင့်", "စဉ်းစားဖွယ်"])
+        })
+    # Confidence အလိုက် စီထားတယ် (အကောင်းဆုံးက အပေါ်ဆုံး)
+    return sorted(predictions, key=lambda x: ["အလွန်ကောင်း", "ကောင်း", "အတန်အသင့်", "စဉ်းစားဖွယ်"].index(x["confidence"]))
+
+# ---- လာအိုထီခန့်မှန်း (အကောင်းဆုံး ၁၀) ----
+def get_laos_lottery_predictions():
+    """လာအိုထီအတွက် အကောင်းဆုံး နံပါတ် ၁ ကနေ ၁၀ အထိ ပြန်ပေးမယ်"""
+    predictions = []
+    # လာအိုထီက ၄ လုံး
+    for i in range(1, 11):
+        num = f"{random.randint(0, 9999):04d}"
+        predictions.append({
+            "rank": i,
+            "number": num,
+            "confidence": random.choice(["အလွန်ကောင်း", "ကောင်း", "အတန်အသင့်", "စဉ်းစားဖွယ်"])
+        })
+    return sorted(predictions, key=lambda x: ["အလွန်ကောင်း", "ကောင်း", "အတန်အသင့်", "စဉ်းစားဖွယ်"].index(x["confidence"]))
+
+# ---- ထိုင်းထီကလင်ဒါ ----
+def get_thai_calendar():
+    """ထိုင်းထီထွက်မယ့်ရက်တွေ (၁ ရက်နဲ့ ၁၆ ရက်) ကို ပြန်ပေးမယ်"""
+    today = datetime.now()
+    dates = []
+    # ဒီလနဲ့ နောက် ၂ လအတွက်
+    for month_offset in range(3):
+        for day in [1, 16]:
+            try:
+                d = datetime(today.year, today.month + month_offset, day)
+                if d >= today:
+                    dates.append(d.strftime("%Y-%m-%d (%A)"))
+            except:
+                pass
+    return dates[:6]  # အနီးဆုံး ၆ ရက်ပြမယ်
+
+# ---- လာအိုထီကလင်ဒါ ----
+def get_laos_calendar():
+    """လာအိုထီထွက်မယ့်ရက်တွေ (တနင်္လာ - သောကြာ) ကို ပြန်ပေးမယ်"""
+    today = datetime.now()
+    dates = []
+    # ဒီနေ့ကနေ ရက် ၁၄ အတွင်း
+    for i in range(14):
+        d = today + timedelta(days=i)
+        # တနင်္လာ (0) ကနေ သောကြာ (4) အထိ
+        if d.weekday() < 5:  # 0=Mon, 4=Fri
+            dates.append(d.strftime("%Y-%m-%d (%A)"))
+    return dates[:10]  # အနီးဆုံး ၁၀ ရက်ပြမယ်
 
 def get_lottery_results():
     today_str = datetime.now().strftime("%Y-%m-%d")
