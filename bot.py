@@ -17,7 +17,7 @@ logging.basicConfig(level=logging.INFO)
 lottery_predictor = LotteryPredictor()
 football_predictor = FootballPredictor()
 
-# ---- Health Check Server (ပိုမိုကောင်းမွန်အောင် ပြင်ဆင်ထားတယ်) ----
+# ---- Health Check Server ----
 async def health_check(request):
     return web.Response(text="OK", status=200)
 
@@ -31,8 +31,7 @@ async def start_health_server():
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
     print(f"✅ Health check server running on port {port}")
-    # Keep the server running forever
-    await asyncio.Event().wait()
+    await asyncio.Event().wait()  # Forever
 
 # ---- Keyboard ----
 def get_main_keyboard():
@@ -251,10 +250,12 @@ async def search_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text += f"🇱🇦 {res['laos']}"
     await update.message.reply_text(text)
 
-# ---- Main (ပိုမိုကောင်းမွန်အောင် ပြင်ဆင်ထားတယ်) ----
-async def main():
+# ---- Main ----
+def main():
     # Health check server ကို နောက်ခံမှာ စတင်ပါ
-    health_task = asyncio.create_task(start_health_server())
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.create_task(start_health_server())
     
     # Bot ကို စတင်ပါ
     application = Application.builder().token(BOT_TOKEN).build()
@@ -267,7 +268,7 @@ async def main():
     application.add_handler(CallbackQueryHandler(button_handler))
     
     print("Bot is starting...")
-    await application.run_polling(allowed_updates=Update.ALL_TYPES)
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
