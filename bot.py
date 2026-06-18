@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -183,8 +182,8 @@ async def search_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if pkg in ["laos", "both"]: text += f"🇱🇦 {res['laos']}"
     await update.message.reply_text(text)
 
-# ---- Main (async) ----
-async def main():
+# ---- Main ----
+def main():
     application = Application.builder().token(BOT_TOKEN).build()
     
     application.add_handler(CommandHandler("start", start))
@@ -196,7 +195,7 @@ async def main():
     application.add_handler(CallbackQueryHandler(button_handler))
     
     print("Bot is starting...")
-    await application.run_polling(allowed_updates=Update.ALL_TYPES)
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
