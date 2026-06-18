@@ -188,16 +188,20 @@ async def search_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ---- Main ----
 def main():
-    app = Application.builder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("addpremium", add_premium))
-    app.add_handler(CommandHandler("removepremium", remove_premium))
-    app.add_handler(CommandHandler("addhistory", add_history))
-    app.add_handler(CommandHandler("setresult", set_result))
-    app.add_handler(CommandHandler("search", search_history))
-    app.add_handler(CallbackQueryHandler(button_handler))
-    print("Bot is running...")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
-
-if __name__ == "__main__":
+    application = Application.builder().token(BOT_TOKEN).build()
+    
+    # Command Handlers
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("addpremium", add_premium))
+    application.add_handler(CommandHandler("removepremium", remove_premium))
+    application.add_handler(CommandHandler("addhistory", add_history))
+    application.add_handler(CommandHandler("setresult", set_result))
+    application.add_handler(CommandHandler("search", search_history))
+    
+    # Callback Handler
+    application.add_handler(CallbackQueryHandler(button_handler))
+    
+    # Polling
+    print("Bot is starting...")
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
     main()
