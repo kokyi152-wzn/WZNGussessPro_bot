@@ -15,13 +15,13 @@ def set_lottery_result_admin(thai_num, laos_num):
     _admin_lottery_cache["laos"] = laos_num
     _admin_lottery_cache["date"] = datetime.now().strftime("%Y-%m-%d")
 
-# ---- ထိုင်းထီခန့်မှန်း (အကောင်းဆုံး ၅ ကွက်) ----
+# ---- ထိုင်းထီ ထိပ်ဆုံး ၅ ကွက် (၆ လုံး) ----
 def get_thai_lottery_predictions():
-    """ထိုင်းထီအတွက် အကောင်းဆုံး နံပါတ် ၅ ကွက် (၆ လုံး)"""
+    """ထိုင်းထီအတွက် ထိပ်ဆုံး ၅ ကွက် (၆ လုံး) ပြန်ပေးမယ်"""
     predictions = []
+    # ထိုင်းထီက ၆ လုံး (000000-999999)
     used_numbers = set()
     for i in range(1, 6):
-        # ဂဏန်းမထပ်အောင် လုပ်မယ်
         while True:
             num = f"{random.randint(0, 999999):06d}"
             if num not in used_numbers:
@@ -35,10 +35,11 @@ def get_thai_lottery_predictions():
         })
     return predictions
 
-# ---- လာအိုထီခန့်မှန်း (အကောင်းဆုံး ၅ ကွက်) ----
+# ---- လာအိုထီ ထိပ်ဆုံး ၅ ကွက် (၄ လုံး) ----
 def get_laos_lottery_predictions():
-    """လာအိုထီအတွက် အကောင်းဆုံး နံပါတ် ၅ ကွက် (၄ လုံး)"""
+    """လာအိုထီအတွက် ထိပ်ဆုံး ၅ ကွက် (၄ လုံး) ပြန်ပေးမယ်"""
     predictions = []
+    # လာအိုထီက ၄ လုံး (0000-9999)
     used_numbers = set()
     for i in range(1, 6):
         while True:
@@ -54,44 +55,29 @@ def get_laos_lottery_predictions():
         })
     return predictions
 
-# ---- ထိုင်းထီထွက်မယ့်ရက် (အနီးဆုံး) ----
-def get_next_thai_draw_date():
-    """ထိုင်းထီထွက်မယ့် နောက်ဆုံးရက် (၁ ရက် သို့ ၁၆ ရက်)"""
+# ---- ထိုင်းထီကလင်ဒါ ----
+def get_thai_calendar():
     today = datetime.now()
-    # ဒီလ ၁ ရက်
-    day1 = datetime(today.year, today.month, 1)
-    # ဒီလ ၁၆ ရက်
-    day16 = datetime(today.year, today.month, 16)
-    
-    # ဒီလ ၁ ရက်က ကျော်သွားပြီဆိုရင် နောက်လ ၁ ရက်
-    if today > day1:
-        if today.month == 12:
-            day1 = datetime(today.year + 1, 1, 1)
-        else:
-            day1 = datetime(today.year, today.month + 1, 1)
-    # ဒီလ ၁၆ ရက်က ကျော်သွားပြီဆိုရင် နောက်လ ၁ ရက်
-    if today > day16:
-        if today.month == 12:
-            day16 = datetime(today.year + 1, 1, 16)
-        else:
-            day16 = datetime(today.year, today.month + 1, 16)
-    
-    # ဘယ်ရက်က အနီးဆုံးလဲ
-    if (day1 - today).days < (day16 - today).days:
-        return day1.strftime("%Y-%m-%d (%A)") + " (လ ၁ ရက်)"
-    else:
-        return day16.strftime("%Y-%m-%d (%A)") + " (လ ၁၆ ရက်)"
+    dates = []
+    for month_offset in range(3):
+        for day in [1, 16]:
+            try:
+                d = datetime(today.year, today.month + month_offset, day)
+                if d >= today:
+                    dates.append(d.strftime("%Y-%m-%d (%A)"))
+            except:
+                pass
+    return dates[:6]
 
-# ---- လာအိုထီထွက်မယ့်ရက် (အနီးဆုံး တနင်္လာ-သောကြာ) ----
-def get_next_laos_draw_date():
-    """လာအိုထီထွက်မယ့် နောက်ဆုံးရက် (တနင်္လာ-သောကြာ)"""
+# ---- လာအိုထီကလင်ဒါ ----
+def get_laos_calendar():
     today = datetime.now()
-    # ဒီနေ့ကစပြီး ၇ ရက်အတွင်း ရှာမယ်
-    for i in range(7):
+    dates = []
+    for i in range(14):
         d = today + timedelta(days=i)
-        if d.weekday() < 5:  # 0=Mon, 4=Fri
-            return d.strftime("%Y-%m-%d (%A)")
-    return "မရှိသေးပါ"
+        if d.weekday() < 5:
+            dates.append(d.strftime("%Y-%m-%d (%A)"))
+    return dates[:10]
 
 def get_lottery_results():
     today_str = datetime.now().strftime("%Y-%m-%d")
@@ -128,7 +114,6 @@ def get_lottery_results():
 
 def get_football_predictions():
     matches = []
-    
     if FOOTBALL_API_KEY:
         try:
             url = "https://api.football-data.org/v4/matches"
@@ -203,23 +188,6 @@ class LotteryPredictor:
             return f"{random.randint(0, 999):03d}"
         else:
             return f"{random.randint(0, 99):02d}"
-    
-    def predict_with_frequency(self, lottery_type="thai"):
-        if not self.history:
-            return self.predict(lottery_type)
-        
-        freq = {}
-        for entry in self.history:
-            num = entry.get(lottery_type, "")
-            if num:
-                freq[num] = freq.get(num, 0) + 1
-        
-        if not freq:
-            return self.predict(lottery_type)
-        
-        max_freq = max(freq.values())
-        most_common = [num for num, count in freq.items() if count == max_freq]
-        return random.choice(most_common) if most_common else self.predict(lottery_type)
 
 class FootballPredictor:
     def __init__(self, football_api_key=None, odds_api_key=None, weather_api_key=None):
