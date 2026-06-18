@@ -1,4 +1,4 @@
-python-telegram-bot[job-queue]==20.7
+python-telegram-bot[job-queue]==21.9
 pymongo
 requests
 python-dotenv
@@ -7,4 +7,3 @@ beautifulsoup4
 lxml
 apscheduler
 scikit-learn
-numpy
