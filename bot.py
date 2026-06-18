@@ -1,4 +1,5 @@
 import logging
+import os
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
@@ -31,7 +32,12 @@ def get_main_keyboard():
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     add_user(user.id, user.username, user.first_name)
-    text = f"မင်္ဂလာပါ {user.first_name}!\n\nဒီ Bot က ဘောလုံးပွဲ၊ ထိုင်းထီနဲ့ လာအိုထီတွေကို ခန့်မှန်းပေးပါတယ်။\nအောက်က ခလုတ်တွေနဲ့ ရွေးချယ်ပါ။"
+    
+    if user.id == ADMIN_ID:
+        text = f"👑 မင်္ဂလာပါ Admin {user.first_name}!\n\nသင် Admin ဖြစ်တဲ့အတွက် Premium မလိုဘဲ အကုန်ကြည့်လို့ရပါတယ်။"
+    else:
+        text = f"မင်္ဂလာပါ {user.first_name}!\n\nဒီ Bot က ဘောလုံးပွဲ၊ ထိုင်းထီနဲ့ လာအိုထီတွေကို ခန့်မှန်းပေးပါတယ်။\nအောက်က ခလုတ်တွေနဲ့ ရွေးချယ်ပါ။"
+    
     await update.message.reply_text(text, reply_markup=get_main_keyboard())
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -111,26 +117,61 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("🔍 `/search YYYY-MM-DD` ပုံစံထည့်ပါ။\nဥပမာ - `/search 2026-06-15`", reply_markup=get_main_keyboard())
 
     elif data == "premium_info":
-        text = (
+        caption = (
             "💎 **Premium Package များ**\n\n"
-            "🇹🇭 **ထိုင်းထီ**\n   • ၁၅ ရက်တစ်ခါ\n   • တစ်ကြိမ် - ၅၀,၀၀၀ ကျပ်\n   • တစ်လ - ၈၀,၀၀၀ ကျပ်\n\n"
-            "🇱🇦 **လာအိုထီ**\n   • တစ်ပတ် ၅ရက် (Mon-Fri)\n   • တစ်ပတ် - ၅၀,၀၀၀ ကျပ် (၅ကြိမ်)\n   • တစ်လ - ၁၈၀,၀၀၀ ကျပ်\n\n"
-            "📞 ဝယ်ယူလိုပါက Admin @YourAdminUsername ကို ဆက်သွယ်ပါ။"
+            "🇹🇭 **ထိုင်းထီ**\n"
+            "   • ၁၅ ရက်တစ်ခါ ထွက်သည်။\n"
+            "   • တစ်ကြိမ်စာ - ၅၀,၀၀၀ ကျပ်\n"
+            "   • တစ်လစာ (၂ကြိမ်) - ၈၀,၀၀၀ ကျပ်\n\n"
+            "🇱🇦 **လာအိုထီ**\n"
+            "   • တစ်ပတ် ၅ရက် (တနင်္လာ - သောကြာ) ထွက်သည်။\n"
+            "   • တစ်ပတ်စာ (၅ကြိမ်) - ၅၀,၀၀၀ ကျပ် 🔥\n"
+            "   • တစ်လစာ - ၁၈၀,၀၀၀ ကျပ်\n\n"
+            "📲 **ငွေလွှဲရန်**\n"
+            "💸 `09767011991`\n"
+            "📝 ငွေလွှဲစရင်း Note တွင် ဝယ်ယူလိုသော Package အမည်ကို ရေးပါ။\n"
+            "📩 ငွေလွှဲပြီးပါက ပြေစာကို အောက်ပါ Admin ထံ ပို့ပေးပါ။"
         )
-        await query.edit_message_text(text, reply_markup=get_main_keyboard())
+        keyboard = [
+            [InlineKeyboardButton("📩 Admin ကိုဆက်သွယ်ရန်", url="https://t.me/UzawgyiGoll")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        try:
+            photo_path = os.path.join('images', 'wavepay.png')
+            with open(photo_path, 'rb') as photo:
+                await query.message.reply_photo(
+                    photo=photo,
+                    caption=caption,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+            await query.delete_message()
+        except FileNotFoundError:
+            await query.edit_message_text(
+                caption + "\n\n⚠️ WavePay Logo ကို ရှာမတွေ့ပါ။",
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
 
 async def add_premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID: return
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("⛔ Admin မဟုတ်ပါ။")
+        return
     try:
         uid = int(context.args[0]); pkg = context.args[1].lower()
-        if pkg not in ["thai", "laos", "both"]: raise
+        if pkg not in ["thai", "laos", "both"]:
+            await update.message.reply_text("❗ thai / laos / both သာထည့်ပါ။")
+            return
         set_package(uid, pkg)
         await update.message.reply_text(f"✅ User {uid} → {pkg}")
     except:
         await update.message.reply_text("❗ /addpremium <user_id> <thai/laos/both>")
 
 async def remove_premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID: return
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("⛔ Admin မဟုတ်ပါ။")
+        return
     try:
         uid = int(context.args[0])
         set_package(uid, "free")
@@ -139,18 +180,24 @@ async def remove_premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❗ /removepremium <user_id>")
 
 async def add_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID: return
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("⛔ Admin မဟုတ်ပါ။")
+        return
     try:
         date_str = context.args[0]; thai = context.args[1]; laos = context.args[2]
         datetime.strptime(date_str, "%Y-%m-%d")
-        if len(thai)!=3 or len(laos)!=2: raise
+        if len(thai)!=3 or len(laos)!=2:
+            await update.message.reply_text("❗ ထိုင်း ၃လုံး၊ လာအို ၂လုံးဖြစ်ရမယ်။")
+            return
         save_history(date_str, thai, laos)
         await update.message.reply_text(f"✅ {date_str} သိမ်းပြီး။\n🇹🇭 {thai}\n🇱🇦 {laos}")
     except:
         await update.message.reply_text("❗ /addhistory YYYY-MM-DD THAI LAOS")
 
 async def set_result(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID: return
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("⛔ Admin မဟုတ်ပါ။")
+        return
     try:
         thai = context.args[0]; laos = context.args[1]
         set_lottery_result_admin(thai, laos)
@@ -161,7 +208,9 @@ async def set_result(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def search_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     pkg = get_package(uid)
-    if pkg == "free": return
+    if pkg == "free" and uid != ADMIN_ID:
+        await update.message.reply_text("⛔ Premium မရှိပါ။")
+        return
     try:
         date_str = context.args[0]
         datetime.strptime(date_str, "%Y-%m-%d")
@@ -173,8 +222,10 @@ async def search_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ {date_str} အတွက် ဒေတာမရှိပါ။")
         return
     text = f"🔍 **{date_str}**\n"
-    if pkg in ["thai", "both"]: text += f"🇹🇭 {res['thai']}\n"
-    if pkg in ["laos", "both"]: text += f"🇱🇦 {res['laos']}"
+    if pkg in ["thai", "both"] or uid == ADMIN_ID:
+        text += f"🇹🇭 {res['thai']}\n"
+    if pkg in ["laos", "both"] or uid == ADMIN_ID:
+        text += f"🇱🇦 {res['laos']}"
     await update.message.reply_text(text)
 
 def main():
