@@ -1,6 +1,6 @@
 from pymongo import MongoClient
 from config import MONGODB_URI, DB_NAME, ADMIN_ID
-from datetime import datetime
+from datetime import datetime, timedelta
 
 client = MongoClient(MONGODB_URI)
 db = client[DB_NAME]
@@ -33,10 +33,8 @@ def get_package(user_id):
     return "free"
 
 def can_access(user_id, feature):
-    # 👑 Admin ဆိုရင် အကုန်ကြည့်ခွင့်ပြုမယ်
     if user_id == ADMIN_ID:
         return True
-    
     pkg = get_package(user_id)
     if pkg == "both":
         return True
@@ -63,5 +61,17 @@ def save_history(date, thai_num, laos_num):
 def get_history_by_date(date):
     return history_collection.find_one({"date": date})
 
-def get_recent_history(limit=10):
+def get_recent_history(limit=1000):
     return list(history_collection.find().sort("date", -1).limit(limit))
+
+def get_history_by_month(months=3):
+    """ပြီးခဲ့တဲ့ လအနည်းငယ်အတွင်း သမိုင်းဒေတာကို ပြန်ပေးမယ်"""
+    cutoff_date = datetime.now() - timedelta(days=months*30)
+    cutoff_str = cutoff_date.strftime("%Y-%m-%d")
+    return list(history_collection.find({"date": {"$gte": cutoff_str}}).sort("date", -1))
+
+def get_history_by_weeks(weeks=4):
+    """ပြီးခဲ့တဲ့ ရက်သတ္တပတ်အနည်းငယ်အတွင်း သမိုင်းဒေတာကို ပြန်ပေးမယ်"""
+    cutoff_date = datetime.now() - timedelta(days=weeks*7)
+    cutoff_str = cutoff_date.strftime("%Y-%m-%d")
+    return list(history_collection.find({"date": {"$gte": cutoff_str}}).sort("date", -1))
