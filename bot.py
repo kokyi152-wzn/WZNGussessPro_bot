@@ -1,7 +1,8 @@
 import logging
 import os
-import sys
+import threading
 from datetime import datetime, timedelta
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 from config import BOT_TOKEN, ADMIN_ID
@@ -13,13 +14,37 @@ from predictions import (
     get_lottery_results, set_lottery_result_admin, LotteryPredictor, FootballPredictor
 )
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO)
 
 lottery_predictor = LotteryPredictor()
 football_predictor = FootballPredictor()
+
+# ---- Health Check Server (HEAD method ပါထည့်ထားတယ်) ----
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path in ['/', '/health']:
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain')
+            self.end_headers()
+            self.wfile.write(b'OK')
+        else:
+            self.send_response(404)
+            self.end_headers()
+    
+    def do_HEAD(self):
+        if self.path in ['/', '/health']:
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain')
+            self.end_headers()
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+def run_health_server():
+    port = int(os.environ.get('PORT', 8080))
+    server = HTTPServer(('0.0.0.0', port), HealthHandler)
+    print(f"✅ Health check server running on port {port}")
+    server.serve_forever()
 
 # ---- Keyboard ----
 def get_main_keyboard():
@@ -54,7 +79,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     data = query.data
 
-    # ---- ထိုင်းထီခန့်မှန်း (ထိပ်ဆုံး ၅) ----
     if data == "lottery_thai":
         if not can_access(user_id, "thai"):
             await query.edit_message_text("⛔ ထိုင်းထီ Package မရှိသေးပါ။", reply_markup=get_main_keyboard())
@@ -67,7 +91,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text += f"{emoji} `{p['number']}` (၆လုံး) - ယုံကြည်မှု: {p['confidence']}\n"
         await query.edit_message_text(text, reply_markup=get_main_keyboard())
 
-    # ---- လာအိုထီခန့်မှန်း (ထိပ်ဆုံး ၅) ----
     elif data == "lottery_laos":
         if not can_access(user_id, "laos"):
             await query.edit_message_text("⛔ လာအိုထီ Package မရှိသေးပါ။", reply_markup=get_main_keyboard())
@@ -80,7 +103,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text += f"{emoji} `{p['number']}` (၄လုံး) - ယုံကြည်မှု: {p['confidence']}\n"
         await query.edit_message_text(text, reply_markup=get_main_keyboard())
 
-    # ---- ထိုင်းထီကလင်ဒါ ----
     elif data == "calendar_thai":
         if not can_access(user_id, "thai"):
             await query.edit_message_text("⛔ ထိုင်းထီ Package မရှိသေးပါ။", reply_markup=get_main_keyboard())
@@ -92,7 +114,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text += f"📌 {d}\n"
         await query.edit_message_text(text, reply_markup=get_main_keyboard())
 
-    # ---- လာအိုထီကလင်ဒါ ----
     elif data == "calendar_laos":
         if not can_access(user_id, "laos"):
             await query.edit_message_text("⛔ လာအိုထီ Package မရှိသေးပါ။", reply_markup=get_main_keyboard())
@@ -104,7 +125,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text += f"📌 {d}\n"
         await query.edit_message_text(text, reply_markup=get_main_keyboard())
 
-    # ---- ဘောလုံး ----
     elif data == "football":
         if not can_access(user_id, "football"):
             await query.edit_message_text("⛔ Full Package မရှိသေးပါ။", reply_markup=get_main_keyboard())
@@ -113,7 +133,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = "⚽ **ဘောလုံးခန့်မှန်း**\n" + "\n".join(preds)
         await query.edit_message_text(text, reply_markup=get_main_keyboard())
 
-    # ---- ပွဲစဉ်စာရင်း ----
     elif data == "fixtures":
         if not can_access(user_id, "fixtures"):
             await query.edit_message_text("⛔ Full Package မရှိသေးပါ။", reply_markup=get_main_keyboard())
@@ -135,7 +154,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text += fixture + "\n\n"
         await query.edit_message_text(text, reply_markup=get_main_keyboard())
 
-    # ---- ဒီနေ့ထီရလဒ် ----
     elif data == "lottery_result":
         if not can_access(user_id, "lottery_result"):
             await query.edit_message_text("⛔ Full Package မရှိသေးပါ။", reply_markup=get_main_keyboard())
@@ -144,7 +162,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = f"📊 **ဒီနေ့ထီရလဒ်**\n🇹🇭 {res['thai']}\n🇱🇦 {res['laos']}\n📌 {res['source']}"
         await query.edit_message_text(text, reply_markup=get_main_keyboard())
 
-    # ---- Premium Info ----
     elif data == "premium_info":
         caption = (
             "💎 **Premium Package များ**\n\n"
@@ -266,6 +283,11 @@ async def search_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ---- Main ----
 def main():
+    # Health check server ကို Thread နဲ့ စတင်ပါ
+    health_thread = threading.Thread(target=run_health_server, daemon=True)
+    health_thread.start()
+    
+    # Bot ကို စတင်ပါ (Application သုံးပြီး)
     application = Application.builder().token(BOT_TOKEN).build()
     
     application.add_handler(CommandHandler("start", start))
@@ -276,22 +298,8 @@ def main():
     application.add_handler(CommandHandler("search", search_history))
     application.add_handler(CallbackQueryHandler(button_handler))
     
-    # Webhook သုံးပြီး Render အတွက်
-    port = int(os.environ.get('PORT', 8080))
-    webhook_url = os.environ.get('RENDER_EXTERNAL_URL', '') + '/webhook'
-    
-    if webhook_url.startswith('https://'):
-        print(f"Bot is starting with webhook: {webhook_url}")
-        application.run_webhook(
-            listen='0.0.0.0',
-            port=port,
-            url_path='webhook',
-            webhook_url=webhook_url
-        )
-    else:
-        # Local development အတွက် polling သုံး
-        print("Bot is starting with polling...")
-        application.run_polling(allowed_updates=Update.ALL_TYPES)
+    print("Bot is starting...")
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
     main()
