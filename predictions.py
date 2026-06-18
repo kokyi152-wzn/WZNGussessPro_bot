@@ -17,9 +17,7 @@ def set_lottery_result_admin(thai_num, laos_num):
 
 # ---- ထိုင်းထီ ထိပ်ဆုံး ၅ ကွက် (၆ လုံး) ----
 def get_thai_lottery_predictions():
-    """ထိုင်းထီအတွက် ထိပ်ဆုံး ၅ ကွက် (၆ လုံး) ပြန်ပေးမယ်"""
     predictions = []
-    # ထိုင်းထီက ၆ လုံး (000000-999999)
     used_numbers = set()
     for i in range(1, 6):
         while True:
@@ -37,9 +35,7 @@ def get_thai_lottery_predictions():
 
 # ---- လာအိုထီ ထိပ်ဆုံး ၅ ကွက် (၄ လုံး) ----
 def get_laos_lottery_predictions():
-    """လာအိုထီအတွက် ထိပ်ဆုံး ၅ ကွက် (၄ လုံး) ပြန်ပေးမယ်"""
     predictions = []
-    # လာအိုထီက ၄ လုံး (0000-9999)
     used_numbers = set()
     for i in range(1, 6):
         while True:
@@ -78,6 +74,40 @@ def get_laos_calendar():
         if d.weekday() < 5:
             dates.append(d.strftime("%Y-%m-%d (%A)"))
     return dates[:10]
+
+# ---- ပြီးခဲ့သော ဘောလုံးရလဒ်များ ----
+def get_past_football_results():
+    """ပြီးခဲ့သော ဘောလုံးရလဒ်များကို ပြန်ပေးမယ်"""
+    results = []
+    if FOOTBALL_API_KEY:
+        try:
+            url = "https://api.football-data.org/v4/matches"
+            params = {"status": "FINISHED", "limit": 10}
+            headers = {"X-Auth-Token": FOOTBALL_API_KEY}
+            resp = requests.get(url, headers=headers, params=params, timeout=10)
+            if resp.status_code == 200:
+                data = resp.json()
+                for match in data.get("matches", []):
+                    home = match["homeTeam"]["name"]
+                    away = match["awayTeam"]["name"]
+                    score = match.get("score", {})
+                    fulltime = score.get("fullTime", {})
+                    home_score = fulltime.get("home", "?")
+                    away_score = fulltime.get("away", "?")
+                    results.append(f"{home} {home_score} - {away_score} {away}")
+                return results
+        except Exception as e:
+            print(f"API Error: {e}")
+    
+    # Mock Data
+    mock = [
+        "မန်ယူ 2 - 1 အာဆင်နယ်",
+        "လီဗာပူး 3 - 0 မန်စီးတီး",
+        "ဘိုင်ယန်မြူးနစ် 1 - 1 ဒေါ့မွန်",
+        "ရီးရဲလ် 2 - 0 ဘာစီလိုနာ",
+        "ပီအက်စ်ဂျီ 4 - 2 အိုလမ်ပစ်"
+    ]
+    return mock
 
 def get_lottery_results():
     today_str = datetime.now().strftime("%Y-%m-%d")
