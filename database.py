@@ -1,5 +1,5 @@
 from pymongo import MongoClient
-from config import MONGODB_URI, DB_NAME
+from config import MONGODB_URI, DB_NAME, ADMIN_ID
 from datetime import datetime
 
 client = MongoClient(MONGODB_URI)
@@ -33,6 +33,10 @@ def get_package(user_id):
     return "free"
 
 def can_access(user_id, feature):
+    # 👑 Admin ဆိုရင် အကုန်ကြည့်ခွင့်ပြုမယ်
+    if user_id == ADMIN_ID:
+        return True
+    
     pkg = get_package(user_id)
     if pkg == "both":
         return True
