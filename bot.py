@@ -106,7 +106,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(
             "📝 **ထိုင်းထီရလဒ်ထည့်ရန်**\n\n"
             "အောက်ပါပုံစံအတိုင်း ရိုက်ထည့်ပါ။\n\n"
-            "`/addthai YYYY-MM-DD|1st|2nd|3rd|4th|5th|6th|7th|8th|9th|10th|11th|12th|13th|14th|15th|16th|17th|18th|19th|20th`\n\n"
+            "`/addthai YYYY-MM-DD|1st|2nd|3rd|...|20th`\n\n"
             "ဥပမာ:\n"
             "`/addthai 2026-06-19|123456|234567|345678|456789|567890|678901|789012|890123|901234|012345|123450|234501|345012|450123|501234|612345|723456|834567|945678|056789`\n\n"
             "📌 ဂဏန်းတစ်ခုစီသည် ၆ လုံးဖြစ်ရပါမည်။",
@@ -121,7 +121,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(
             "📝 **လာအိုထီရလဒ်ထည့်ရန်**\n\n"
             "အောက်ပါပုံစံအတိုင်း ရိုက်ထည့်ပါ။\n\n"
-            "`/addlaos YYYY-MM-DD|1st|2nd|3rd|4th|5th|6th|7th|8th|9th|10th|11th|12th|13th`\n\n"
+            "`/addlaos YYYY-MM-DD|1st|2nd|3rd|...|13th`\n\n"
             "ဥပမာ:\n"
             "`/addlaos 2026-06-19|1234|2345|3456|4567|5678|6789|7890|8901|9012|0123|1230|2340|3450`\n\n"
             "📌 ဂဏန်းတစ်ခုစီသည် ၄ လုံးဖြစ်ရပါမည်။",
@@ -166,7 +166,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ---- User Features ----
     elif data == "past_football":
         if not can_access(user_id, "past_football"):
-            await query.edit_message_text("⛔ Full Package မရှိသေးပါ။", reply_markup=get_main_keyboard() if user_id != ADMIN_ID else get_admin_keyboard())
+            await query.edit_message_text("⛔ Full Package မရှိသေးပါ။", reply_markup=get_admin_keyboard() if user_id == ADMIN_ID else get_main_keyboard())
             return
         results = get_past_football_results()
         
@@ -444,9 +444,19 @@ async def search_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ---- Main ----
 def main():
+    # 1. Webhook ကို ဖျက်ပါ (Conflict error အတွက်)
+    import requests
+    try:
+        requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook")
+        print("✅ Webhook deleted successfully")
+    except Exception as e:
+        print(f"⚠️ Webhook delete error: {e}")
+    
+    # 2. Health check server ကို Thread နဲ့ စတင်ပါ
     health_thread = threading.Thread(target=run_health_server, daemon=True)
     health_thread.start()
     
+    # 3. Bot ကို စတင်ပါ
     application = Application.builder().token(BOT_TOKEN).build()
     
     application.add_handler(CommandHandler("start", start))
