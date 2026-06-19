@@ -15,7 +15,6 @@ def set_lottery_result_admin(thai_num, laos_num):
     _admin_lottery_cache["laos"] = laos_num
     _admin_lottery_cache["date"] = datetime.now().strftime("%Y-%m-%d")
 
-# ---- ထိုင်းထီ ထိပ်ဆုံး ၅ ကွက် (၆ လုံး) ----
 def get_thai_lottery_predictions():
     predictions = []
     used_numbers = set()
@@ -26,14 +25,9 @@ def get_thai_lottery_predictions():
                 used_numbers.add(num)
                 break
         confidence = random.choice(["အလွန်ကောင်း", "ကောင်း", "အတန်အသင့်"])
-        predictions.append({
-            "rank": i,
-            "number": num,
-            "confidence": confidence
-        })
+        predictions.append({"rank": i, "number": num, "confidence": confidence})
     return predictions
 
-# ---- လာအိုထီ ထိပ်ဆုံး ၅ ကွက် (၄ လုံး) ----
 def get_laos_lottery_predictions():
     predictions = []
     used_numbers = set()
@@ -44,14 +38,9 @@ def get_laos_lottery_predictions():
                 used_numbers.add(num)
                 break
         confidence = random.choice(["အလွန်ကောင်း", "ကောင်း", "အတန်အသင့်"])
-        predictions.append({
-            "rank": i,
-            "number": num,
-            "confidence": confidence
-        })
+        predictions.append({"rank": i, "number": num, "confidence": confidence})
     return predictions
 
-# ---- ထိုင်းထီကလင်ဒါ ----
 def get_thai_calendar():
     today = datetime.now()
     dates = []
@@ -65,7 +54,6 @@ def get_thai_calendar():
                 pass
     return dates[:6]
 
-# ---- လာအိုထီကလင်ဒါ ----
 def get_laos_calendar():
     today = datetime.now()
     dates = []
@@ -75,9 +63,7 @@ def get_laos_calendar():
             dates.append(d.strftime("%Y-%m-%d (%A)"))
     return dates[:10]
 
-# ---- ပြီးခဲ့သော ဘောလုံးရလဒ်များ ----
 def get_past_football_results():
-    """ပြီးခဲ့သော ဘောလုံးရလဒ်များကို ပြန်ပေးမယ်"""
     results = []
     if FOOTBALL_API_KEY:
         try:
@@ -98,20 +84,15 @@ def get_past_football_results():
                 return results
         except Exception as e:
             print(f"API Error: {e}")
-    
-    # Mock Data
     mock = [
         "မန်ယူ 2 - 1 အာဆင်နယ်",
         "လီဗာပူး 3 - 0 မန်စီးတီး",
         "ဘိုင်ယန်မြူးနစ် 1 - 1 ဒေါ့မွန်",
-        "ရီးရဲလ် 2 - 0 ဘာစီလိုနာ",
-        "ပီအက်စ်ဂျီ 4 - 2 အိုလမ်ပစ်"
     ]
     return mock
 
 def get_lottery_results():
     today_str = datetime.now().strftime("%Y-%m-%d")
-    
     if _admin_lottery_cache["date"] == today_str:
         if _admin_lottery_cache["thai"] and _admin_lottery_cache["laos"]:
             return {
@@ -119,7 +100,6 @@ def get_lottery_results():
                 "laos": _admin_lottery_cache["laos"],
                 "source": "Admin မှသတ်မှတ်သည်"
             }
-    
     try:
         url = "https://www.glomyanmar.com/category/laos-lottery/"
         headers = {"User-Agent": "Mozilla/5.0"}
@@ -135,7 +115,6 @@ def get_lottery_results():
                 }
     except Exception as e:
         print(f"Scraping Error: {e}")
-    
     return {
         "thai": f"{random.randint(0, 999):03d}",
         "laos": f"{random.randint(0, 99):02d}",
@@ -165,7 +144,6 @@ def get_football_predictions():
                 return matches
         except Exception as e:
             print(f"API Error: {e}")
-    
     mock_matches = [
         ("မန်ယူ", "အာဆင်နယ်"),
         ("လီဗာပူး", "မန်စီးတီး"),
@@ -186,7 +164,6 @@ def get_today_fixtures():
     today = datetime.now().strftime("%Y-%m-%d")
     tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
     matches = []
-    
     if FOOTBALL_API_KEY:
         try:
             url = f"https://api.football-data.org/v4/matches"
@@ -203,7 +180,6 @@ def get_today_fixtures():
                 return matches if matches else ["ယနေ့ပွဲစဉ် မရှိသေးပါ"]
         except Exception as e:
             print(f"Fixtures API Error: {e}")
-    
     mock = [("မန်ယူ", "အာဆင်နယ်", "20:00"), ("လီဗာပူး", "မန်စီးတီး", "22:00")]
     for home, away, t in mock:
         matches.append(f"🆚 {home} vs {away}\n   ⏰ မြန်မာချိန် {t}")
@@ -212,7 +188,6 @@ def get_today_fixtures():
 class LotteryPredictor:
     def __init__(self, history_data=None):
         self.history = history_data or []
-    
     def predict(self, lottery_type="thai"):
         if lottery_type == "thai":
             return f"{random.randint(0, 999):03d}"
@@ -247,35 +222,23 @@ class FootballPredictor:
             resp = requests.get(url, params=params, timeout=10)
             if resp.status_code == 200:
                 data = resp.json()
-                return {
-                    "temp": data["main"]["temp"],
-                    "condition": data["weather"][0]["description"]
-                }
+                return {"temp": data["main"]["temp"], "condition": data["weather"][0]["description"]}
         except Exception as e:
             print(f"Weather API Error: {e}")
         return None
     
     def predict_match(self, home_team, away_team, match_id=None, city=None):
-        result = {
-            "home": home_team,
-            "away": away_team,
-            "prediction": None,
-            "confidence": "Medium",
-            "details": {}
-        }
-        
+        result = {"home": home_team, "away": away_team, "prediction": None, "confidence": "Medium", "details": {}}
         odds = None
         if match_id:
             odds = self.get_match_odds(match_id)
             if odds:
                 result["details"]["odds"] = odds
-        
         weather = None
         if city:
             weather = self.get_weather(city)
             if weather:
                 result["details"]["weather"] = weather
-        
         rand = random.random()
         if rand < 0.4:
             pred = f"🏠 {home_team} နိုင်"
@@ -283,12 +246,9 @@ class FootballPredictor:
             pred = f"✈️ {away_team} နိုင်"
         else:
             pred = "🤝 သရေ"
-        
         result["prediction"] = pred
-        
         if odds:
             result["confidence"] = "High"
-        
         return result
     
     def predict_multiple(self, matches):
