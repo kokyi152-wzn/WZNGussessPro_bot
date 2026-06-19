@@ -6,41 +6,102 @@ client = MongoClient(MONGODB_URI)
 db = client[DB_NAME]
 users_collection = db["users"]
 history_collection = db["lottery_history"]
-thai_results_collection = db["thai_lottery_results"]
-laos_results_collection = db["laos_lottery_results"]
+thai_result_collection = db["thai_full_results"]
+laos_result_collection = db["laos_full_results"]
 
-# ... (အရင်က ရှိပြီးသား functions များ) ...
+# ---- User Functions ----
+def add_user(user_id, username, first_name):
+    if not users_collection.find_one({"user_id": user_id}):
+        users_collection.insert_one({
+            "user_id": user_id,
+            "username": username,
+            "first_name": first_name,
+            "package": "free",
+            "joined_date": datetime.now()
+        })
 
-# ---- ထိုင်းထီရလဒ်များ သိမ်းဆည်းခြင်းနှင့် ပြန်လည်ရယူခြင်း ----
-def save_thai_result(date, data):
-    """ထိုင်းထီရလဒ်ကို သိမ်းဆည်းမယ်"""
-    thai_results_collection.update_one(
+def get_user(user_id):
+    return users_collection.find_one({"user_id": user_id})
+
+def set_package(user_id, package_type):
+    users_collection.update_one(
+        {"user_id": user_id},
+        {"$set": {"package": package_type}}
+    )
+
+def get_package(user_id):
+    user = get_user(user_id)
+    if user:
+        return user.get("package", "free")
+    return "free"
+
+def can_access(user_id, feature):
+    if user_id == ADMIN_ID:
+        return True
+    pkg = get_package(user_id)
+    if pkg == "both":
+        return True
+    if feature == "thai" and pkg == "thai":
+        return True
+    if feature == "laos" and pkg == "laos":
+        return True
+    if feature in ["football", "fixtures", "lottery_result"]:
+        return pkg == "both"
+    return False
+
+# ---- History Functions ----
+def save_history(date, thai_num, laos_num):
+    history_collection.update_one(
         {"date": date},
-        {"$set": {"date": date, "results": data, "updated_at": datetime.now()}},
+        {"$set": {
+            "date": date,
+            "thai": thai_num,
+            "laos": laos_num,
+            "updated_at": datetime.now()
+        }},
         upsert=True
     )
 
-def get_thai_result(date):
-    """ရက်စွဲအလိုက် ထိုင်းထီရလဒ်ကို ပြန်ပေးမယ်"""
-    return thai_results_collection.find_one({"date": date})
+def get_history_by_date(date):
+    return history_collection.find_one({"date": date})
 
-def get_all_thai_results(limit=20):
-    """ထိုင်းထီရလဒ်အကုန်ကို ပြန်ပေးမယ် (နောက်ဆုံးအရင်ဆုံး)"""
-    return list(thai_results_collection.find().sort("date", -1).limit(limit))
+def get_recent_history(limit=1000):
+    return list(history_collection.find().sort("date", -1).limit(limit))
 
-# ---- လာအိုထီရလဒ်များ သိမ်းဆည်းခြင်းနှင့် ပြန်လည်ရယူခြင်း ----
-def save_laos_result(date, data):
-    """လာအိုထီရလဒ်ကို သိမ်းဆည်းမယ်"""
-    laos_results_collection.update_one(
-        {"date": date},
-        {"$set": {"date": date, "results": data, "updated_at": datetime.now()}},
+def get_history_by_month(months=3):
+    cutoff_date = datetime.now() - timedelta(days=months*30)
+    cutoff_str = cutoff_date.strftime("%Y-%m-%d")
+    return list(history_collection.find({"date": {"$gte": cutoff_str}}).sort("date", -1))
+
+def get_history_by_weeks(weeks=4):
+    cutoff_date = datetime.now() - timedelta(days=weeks*7)
+    cutoff_str = cutoff_date.strftime("%Y-%m-%d")
+    return list(history_collection.find({"date": {"$gte": cutoff_str}}).sort("date", -1))
+
+# ---- Thai Full Result Functions ----
+def save_full_thai_result(data):
+    thai_result_collection.update_one(
+        {"date": data["date"]},
+        {"$set": data},
         upsert=True
     )
 
-def get_laos_result(date):
-    """ရက်စွဲအလိုက် လာအိုထီရလဒ်ကို ပြန်ပေးမယ်"""
-    return laos_results_collection.find_one({"date": date})
+def get_full_thai_result():
+    return list(thai_result_collection.find().sort("date", -1))
 
-def get_all_laos_results(limit=20):
-    """လာအိုထီရလဒ်အကုန်ကို ပြန်ပေးမယ် (နောက်ဆုံးအရင်ဆုံး)"""
-    return list(laos_results_collection.find().sort("date", -1).limit(limit))
+def get_full_thai_result_by_date(date):
+    return thai_result_collection.find_one({"date": date})
+
+# ---- Laos Full Result Functions ----
+def save_full_laos_result(data):
+    laos_result_collection.update_one(
+        {"date": data["date"]},
+        {"$set": data},
+        upsert=True
+    )
+
+def get_full_laos_result():
+    return list(laos_result_collection.find().sort("date", -1))
+
+def get_full_laos_result_by_date(date):
+    return laos_result_collection.find_one({"date": date})
