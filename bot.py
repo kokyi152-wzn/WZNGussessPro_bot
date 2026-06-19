@@ -4,28 +4,21 @@ import threading
 from datetime import datetime, timedelta
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, ConversationHandler
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 from config import BOT_TOKEN, ADMIN_ID
-from database import (
-    add_user, get_package, set_package, can_access,
-    get_history_by_date, get_recent_history, save_history,
-    get_history_by_month, get_history_by_weeks,
-    save_thai_result, get_thai_result, get_all_thai_results,
-    save_laos_result, get_laos_result, get_all_laos_results
-)
+from database import add_user, get_package, set_package, can_access, get_history_by_date, get_recent_history, save_history, get_history_by_month, get_history_by_weeks, save_full_thai_result, save_full_laos_result, get_full_thai_result, get_full_laos_result
 from predictions import (
     get_football_predictions, get_today_fixtures,
     get_thai_lottery_predictions, get_laos_lottery_predictions,
     get_thai_calendar, get_laos_calendar,
-    get_lottery_results, set_lottery_result_admin,
+    get_lottery_results, set_lottery_result_admin, LotteryPredictor, FootballPredictor,
     get_past_football_results
 )
 
 logging.basicConfig(level=logging.INFO)
 
-# Conversation states for adding lottery results
-THAI_DATE, THAI_PRIZE1, THAI_PRIZE2, THAI_PRIZE3, THAI_PRIZE4, THAI_PRIZE5, THAI_PRIZE6, THAI_PRIZE7, THAI_PRIZE8 = range(9)
-LAOS_DATE, LAOS_PRIZE1, LAOS_PRIZE2, LAOS_PRIZE3, LAOS_PRIZE4, LAOS_PRIZE5, LAOS_PRIZE6, LAOS_PRIZE7, LAOS_PRIZE8, LAOS_PRIZE9, LAOS_PRIZE10, LAOS_PRIZE11, LAOS_PRIZE12, LAOS_PRIZE13 = range(13, 26)
+lottery_predictor = LotteryPredictor()
+football_predictor = FootballPredictor()
 
 # ---- Health Check Server ----
 class HealthHandler(BaseHTTPRequestHandler):
@@ -64,22 +57,19 @@ def get_main_keyboard():
         [InlineKeyboardButton("🇱🇦 လာအိုထီခန့်မှန်း (ထိပ်ဆုံး ၅)", callback_data="lottery_laos")],
         [InlineKeyboardButton("📅 ထိုင်းထီကလင်ဒါ", callback_data="calendar_thai")],
         [InlineKeyboardButton("📅 လာအိုထီကလင်ဒါ", callback_data="calendar_laos")],
-        [InlineKeyboardButton("📊 ထိုင်းထီရလဒ်များ", callback_data="view_thai_results")],
-        [InlineKeyboardButton("📊 လာအိုထီရလဒ်များ", callback_data="view_laos_results")],
         [InlineKeyboardButton("📊 ဒီနေ့ထီထွက်ရလဒ်", callback_data="lottery_result")],
         [InlineKeyboardButton("💎 Premium ဝယ်ယူရန်", callback_data="premium_info")]
     ]
-    # Admin အတွက် သီးသန့် ခလုတ်
-    if update and update.effective_user and update.effective_user.id == ADMIN_ID:
-        keyboard.append([InlineKeyboardButton("⚙️ Admin Panel", callback_data="admin_panel")])
     return InlineKeyboardMarkup(keyboard)
 
-# ---- Admin Panel Keyboard ----
+# ---- Admin Keyboard ----
 def get_admin_keyboard():
     keyboard = [
-        [InlineKeyboardButton("🇹🇭 ထိုင်းထီရလဒ်ထည့်ရန်", callback_data="add_thai_result")],
-        [InlineKeyboardButton("🇱🇦 လာအိုထီရလဒ်ထည့်ရန်", callback_data="add_laos_result")],
-        [InlineKeyboardButton("🔙 နောက်သို့", callback_data="back_to_main")]
+        [InlineKeyboardButton("📝 ထိုင်းထီရလဒ်ထည့်ရန်", callback_data="admin_add_thai")],
+        [InlineKeyboardButton("📝 လာအိုထီရလဒ်ထည့်ရန်", callback_data="admin_add_laos")],
+        [InlineKeyboardButton("📋 ထိုင်းထီရလဒ်ကြည့်ရန်", callback_data="admin_view_thai")],
+        [InlineKeyboardButton("📋 လာအိုထီရလဒ်ကြည့်ရန်", callback_data="admin_view_laos")],
+        [InlineKeyboardButton("🔙 နောက်သို့", callback_data="admin_back")]
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -89,18 +79,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     add_user(user.id, user.username, user.first_name)
     
     if user.id == ADMIN_ID:
-        text = f"👑 မင်္ဂလာပါ Admin {user.first_name}!\n\nသင် Admin ဖြစ်တဲ့အတွက် Premium မလိုဘဲ အကုန်ကြည့်လို့ရပါတယ်။"
+        text = f"👑 မင်္ဂလာပါ Admin {user.first_name}!\n\nသင်သည် Admin ဖြစ်ပါသည်။\nအောက်ပါ ခလုတ်များကို အသုံးပြုနိုင်ပါသည်။"
+        await update.message.reply_text(text, reply_markup=get_admin_keyboard())
     else:
         text = f"မင်္ဂလာပါ {user.first_name}!\n\nဒီ Bot က ဘောလုံးပွဲ၊ ထိုင်းထီနဲ့ လာအိုထီတွေကို ခန့်မှန်းပေးပါတယ်။\nအောက်က ခလုတ်တွေနဲ့ ရွေးချယ်ပါ။"
-    
-    await update.message.reply_text(text, reply_markup=get_main_keyboard(update))
-
-# ---- /adminpanel ----
-async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
-        await update.message.reply_text("⛔ သင် Admin မဟုတ်ပါ။")
-        return
-    await update.message.reply_text("⚙️ **Admin Panel**\n\nအောက်ပါခလုတ်များမှ ရွေးချယ်ပါ။", reply_markup=get_admin_keyboard(), parse_mode="Markdown")
+        await update.message.reply_text(text, reply_markup=get_main_keyboard())
 
 # ---- Button Handler ----
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -108,41 +91,86 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     user_id = query.from_user.id
     data = query.data
+    user = query.from_user
 
-    # ---- Admin Panel ----
-    if data == "admin_panel":
-        if user_id != ADMIN_ID:
-            await query.edit_message_text("⛔ သင် Admin မဟုတ်ပါ။")
-            return
-        await query.edit_message_text("⚙️ **Admin Panel**\n\nအောက်ပါခလုတ်များမှ ရွေးချယ်ပါ။", reply_markup=get_admin_keyboard(), parse_mode="Markdown")
+    # ---- Admin Menu ----
+    if data == "admin_back":
+        await query.edit_message_text("👑 Admin Menu", reply_markup=get_admin_keyboard())
         return
 
-    elif data == "back_to_main":
-        await query.edit_message_text("🔙 ပင်မစာမျက်နှာသို့ ပြန်သွားပါပြီ။", reply_markup=get_main_keyboard(update))
+    # ---- Admin ထိုင်းထီရလဒ်ထည့်ရန် ----
+    elif data == "admin_add_thai":
+        if user_id != ADMIN_ID:
+            await query.edit_message_text("⛔ သင်သည် Admin မဟုတ်ပါ။")
+            return
+        await query.edit_message_text(
+            "📝 **ထိုင်းထီရလဒ်ထည့်ရန်**\n\n"
+            "အောက်ပါပုံစံအတိုင်း ရိုက်ထည့်ပါ။\n\n"
+            "`/addthai YYYY-MM-DD|1st|2nd|3rd|4th|5th|6th|7th|8th|9th|10th|11th|12th|13th|14th|15th|16th|17th|18th|19th|20th`\n\n"
+            "ဥပမာ:\n"
+            "`/addthai 2026-06-19|123456|234567|345678|456789|567890|678901|789012|890123|901234|012345|123450|234501|345012|450123|501234|612345|723456|834567|945678|056789`\n\n"
+            "သို့မဟုတ် အောက်ပါအတိုင်း အဆင့်ဆင့်ထည့်နိုင်ပါသည်။\n\n"
+            "`/addthai` ကိုနှိပ်ပြီး ပုံစံအတိုင်း ရိုက်ထည့်ပါ။",
+            parse_mode="Markdown"
+        )
         return
 
-    # ---- ထိုင်းထီရလဒ်ထည့်ရန် ----
-    elif data == "add_thai_result":
+    # ---- Admin လာအိုထီရလဒ်ထည့်ရန် ----
+    elif data == "admin_add_laos":
         if user_id != ADMIN_ID:
-            await query.edit_message_text("⛔ သင် Admin မဟုတ်ပါ။")
+            await query.edit_message_text("⛔ သင်သည် Admin မဟုတ်ပါ။")
             return
-        context.user_data['result_type'] = 'thai'
-        await query.edit_message_text("📅 **ထိုင်းထီရလဒ်ထည့်ရန်**\n\nရက်စွဲကို YYYY-MM-DD ပုံစံဖြင့် ရိုက်ထည့်ပါ။\nဥပမာ - `2026-06-19`", parse_mode="Markdown")
-        return THAI_DATE
+        await query.edit_message_text(
+            "📝 **လာအိုထီရလဒ်ထည့်ရန်**\n\n"
+            "အောက်ပါပုံစံအတိုင်း ရိုက်ထည့်ပါ။\n\n"
+            "`/addlaos YYYY-MM-DD|1st|2nd|3rd|4th|5th|6th|7th|8th|9th|10th|11th|12th|13th`\n\n"
+            "ဥပမာ:\n"
+            "`/addlaos 2026-06-19|1234|2345|3456|4567|5678|6789|7890|8901|9012|0123|1230|2340|3450`",
+            parse_mode="Markdown"
+        )
+        return
 
-    # ---- လာအိုထီရလဒ်ထည့်ရန် ----
-    elif data == "add_laos_result":
+    # ---- Admin ထိုင်းထီရလဒ်ကြည့်ရန် ----
+    elif data == "admin_view_thai":
         if user_id != ADMIN_ID:
-            await query.edit_message_text("⛔ သင် Admin မဟုတ်ပါ။")
+            await query.edit_message_text("⛔ သင်သည် Admin မဟုတ်ပါ။")
             return
-        context.user_data['result_type'] = 'laos'
-        await query.edit_message_text("📅 **လာအိုထီရလဒ်ထည့်ရန်**\n\nရက်စွဲကို YYYY-MM-DD ပုံစံဖြင့် ရိုက်ထည့်ပါ။\nဥပမာ - `2026-06-19`", parse_mode="Markdown")
-        return LAOS_DATE
+        results = get_full_thai_result()
+        if not results:
+            await query.edit_message_text("📋 ထိုင်းထီရလဒ် မရှိသေးပါ။", reply_markup=get_admin_keyboard())
+            return
+        text = "📋 **ထိုင်းထီရလဒ်များ**\n\n"
+        for r in results[:10]:
+            text += f"📅 {r.get('date', 'N/A')}\n"
+            text += f"🥇 1st: `{r.get('prize_1', 'N/A')}`\n"
+            text += f"🥈 2nd: `{r.get('prize_2', 'N/A')}`\n"
+            text += f"🥉 3rd: `{r.get('prize_3', 'N/A')}`\n"
+            text += f"4th: `{r.get('prize_4', 'N/A')}`\n"
+            text += f"5th: `{r.get('prize_5', 'N/A')}`\n"
+            text += f"6th-20th: `{r.get('prize_6', 'N/A')}` ...\n\n"
+        await query.edit_message_text(text, reply_markup=get_admin_keyboard(), parse_mode="Markdown")
 
-    # ---- ထိုင်းထီခန့်မှန်း (ထိပ်ဆုံး ၅) ----
-    if data == "lottery_thai":
+    # ---- Admin လာအိုထီရလဒ်ကြည့်ရန် ----
+    elif data == "admin_view_laos":
+        if user_id != ADMIN_ID:
+            await query.edit_message_text("⛔ သင်သည် Admin မဟုတ်ပါ။")
+            return
+        results = get_full_laos_result()
+        if not results:
+            await query.edit_message_text("📋 လာအိုထီရလဒ် မရှိသေးပါ။", reply_markup=get_admin_keyboard())
+            return
+        text = "📋 **လာအိုထီရလဒ်များ**\n\n"
+        for r in results[:10]:
+            text += f"📅 {r.get('date', 'N/A')}\n"
+            for i in range(1, 14):
+                text += f"{i}st: `{r.get(f'prize_{i}', 'N/A')}`\n"
+            text += "\n"
+        await query.edit_message_text(text, reply_markup=get_admin_keyboard(), parse_mode="Markdown")
+
+    # ---- User Features ----
+    elif data == "lottery_thai":
         if not can_access(user_id, "thai"):
-            await query.edit_message_text("⛔ ထိုင်းထီ Package မရှိသေးပါ။", reply_markup=get_main_keyboard(update))
+            await query.edit_message_text("⛔ ထိုင်းထီ Package မရှိသေးပါ။", reply_markup=get_main_keyboard())
             return
         predictions = get_thai_lottery_predictions()
         today = datetime.now().strftime("%Y-%m-%d")
@@ -150,12 +178,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for p in predictions:
             emoji = "🥇" if p["rank"] == 1 else "🥈" if p["rank"] == 2 else "🥉" if p["rank"] == 3 else f"#{p['rank']}"
             text += f"{emoji} `{p['number']}` (၆လုံး) - ယုံကြည်မှု: {p['confidence']}\n"
-        await query.edit_message_text(text, reply_markup=get_main_keyboard(update))
+        await query.edit_message_text(text, reply_markup=get_main_keyboard())
 
-    # ---- လာအိုထီခန့်မှန်း (ထိပ်ဆုံး ၅) ----
     elif data == "lottery_laos":
         if not can_access(user_id, "laos"):
-            await query.edit_message_text("⛔ လာအိုထီ Package မရှိသေးပါ။", reply_markup=get_main_keyboard(update))
+            await query.edit_message_text("⛔ လာအိုထီ Package မရှိသေးပါ။", reply_markup=get_main_keyboard())
             return
         predictions = get_laos_lottery_predictions()
         today = datetime.now().strftime("%Y-%m-%d")
@@ -163,12 +190,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for p in predictions:
             emoji = "🥇" if p["rank"] == 1 else "🥈" if p["rank"] == 2 else "🥉" if p["rank"] == 3 else f"#{p['rank']}"
             text += f"{emoji} `{p['number']}` (၄လုံး) - ယုံကြည်မှု: {p['confidence']}\n"
-        await query.edit_message_text(text, reply_markup=get_main_keyboard(update))
+        await query.edit_message_text(text, reply_markup=get_main_keyboard())
 
-    # ---- ပြီးခဲ့သော ဘောလုံးရလဒ်များ ----
     elif data == "past_football":
         if not can_access(user_id, "football"):
-            await query.edit_message_text("⛔ Full Package မရှိသေးပါ။", reply_markup=get_main_keyboard(update))
+            await query.edit_message_text("⛔ Full Package မရှိသေးပါ။", reply_markup=get_main_keyboard())
             return
         results = get_past_football_results()
         text = "📊 **ပြီးခဲ့သော ဘောလုံးရလဒ်များ**\n\n"
@@ -177,12 +203,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text += f"🆚 {r}\n"
         else:
             text += "ပြီးခဲ့သော ဘောလုံးရလဒ်များ မရှိသေးပါ။"
-        await query.edit_message_text(text, reply_markup=get_main_keyboard(update))
+        await query.edit_message_text(text, reply_markup=get_main_keyboard())
 
-    # ---- ထိုင်းထီကလင်ဒါ ----
     elif data == "calendar_thai":
         if not can_access(user_id, "thai"):
-            await query.edit_message_text("⛔ ထိုင်းထီ Package မရှိသေးပါ။", reply_markup=get_main_keyboard(update))
+            await query.edit_message_text("⛔ ထိုင်းထီ Package မရှိသေးပါ။", reply_markup=get_main_keyboard())
             return
         dates = get_thai_calendar()
         text = "📅 **ထိုင်းထီထွက်မယ့်ရက်များ**\n\n"
@@ -197,12 +222,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if len(thai_num) < 6:
                     thai_num = thai_num.zfill(6)
                 text += f"📅 {h['date']} → `{thai_num}`\n"
-        await query.edit_message_text(text, reply_markup=get_main_keyboard(update))
+        await query.edit_message_text(text, reply_markup=get_main_keyboard())
 
-    # ---- လာအိုထီကလင်ဒါ ----
     elif data == "calendar_laos":
         if not can_access(user_id, "laos"):
-            await query.edit_message_text("⛔ လာအိုထီ Package မရှိသေးပါ။", reply_markup=get_main_keyboard(update))
+            await query.edit_message_text("⛔ လာအိုထီ Package မရှိသေးပါ။", reply_markup=get_main_keyboard())
             return
         dates = get_laos_calendar()
         text = "📅 **လာအိုထီထွက်မယ့်ရက်များ**\n\n"
@@ -217,62 +241,19 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if len(laos_num) < 4:
                     laos_num = laos_num.zfill(4)
                 text += f"📅 {h['date']} → `{laos_num}`\n"
-        await query.edit_message_text(text, reply_markup=get_main_keyboard(update))
+        await query.edit_message_text(text, reply_markup=get_main_keyboard())
 
-    # ---- ထိုင်းထီရလဒ်များကြည့်ရန် ----
-    elif data == "view_thai_results":
-        if not can_access(user_id, "thai"):
-            await query.edit_message_text("⛔ ထိုင်းထီ Package မရှိသေးပါ။", reply_markup=get_main_keyboard(update))
-            return
-        results = get_all_thai_results(10)
-        if not results:
-            await query.edit_message_text("📊 ထိုင်းထီရလဒ်များ မရှိသေးပါ။", reply_markup=get_main_keyboard(update))
-            return
-        text = "📊 **ထိုင်းထီရလဒ်များ**\n\n"
-        for res in results:
-            text += f"📅 {res['date']}\n"
-            data = res.get('results', {})
-            text += f"🥇 ပထမဆု: `{data.get('prize1', 'N/A')}`\n"
-            text += f"🥈 ဒုတိယဆု (၅ဆု): `{data.get('prize2', 'N/A')}`\n"
-            text += f"🥉 တတိယဆု (၁၀ဆု): `{data.get('prize3', 'N/A')}`\n"
-            text += f"🎯 စတုတ္ထဆု (၅၀ဆု): `{data.get('prize4', 'N/A')}`\n"
-            text += f"🎯 ပဉ္စမဆု (၁၀၀ဆု): `{data.get('prize5', 'N/A')}`\n"
-            text += f"🔢 ပထမသုံးလုံး: `{data.get('first3', 'N/A')}`\n"
-            text += f"🔢 နောက်ဆုံးသုံးလုံး: `{data.get('last3', 'N/A')}`\n"
-            text += f"🔢 နောက်ဆုံးနှစ်လုံး: `{data.get('last2', 'N/A')}`\n\n"
-        await query.edit_message_text(text, reply_markup=get_main_keyboard(update))
-
-    # ---- လာအိုထီရလဒ်များကြည့်ရန် ----
-    elif data == "view_laos_results":
-        if not can_access(user_id, "laos"):
-            await query.edit_message_text("⛔ လာအိုထီ Package မရှိသေးပါ။", reply_markup=get_main_keyboard(update))
-            return
-        results = get_all_laos_results(10)
-        if not results:
-            await query.edit_message_text("📊 လာအိုထီရလဒ်များ မရှိသေးပါ။", reply_markup=get_main_keyboard(update))
-            return
-        text = "📊 **လာအိုထီရလဒ်များ**\n\n"
-        for res in results:
-            text += f"📅 {res['date']}\n"
-            data = res.get('results', {})
-            for i in range(1, 14):
-                text += f"🥇 ဆု {i}: `{data.get(f'prize{i}', 'N/A')}`\n"
-            text += "\n"
-        await query.edit_message_text(text, reply_markup=get_main_keyboard(update))
-
-    # ---- ဘောလုံး ----
     elif data == "football":
         if not can_access(user_id, "football"):
-            await query.edit_message_text("⛔ Full Package မရှိသေးပါ။", reply_markup=get_main_keyboard(update))
+            await query.edit_message_text("⛔ Full Package မရှိသေးပါ။", reply_markup=get_main_keyboard())
             return
         preds = get_football_predictions()
         text = "⚽ **ဘောလုံးခန့်မှန်း**\n" + "\n".join(preds)
-        await query.edit_message_text(text, reply_markup=get_main_keyboard(update))
+        await query.edit_message_text(text, reply_markup=get_main_keyboard())
 
-    # ---- ပွဲစဉ်စာရင်း ----
     elif data == "fixtures":
         if not can_access(user_id, "fixtures"):
-            await query.edit_message_text("⛔ Full Package မရှိသေးပါ။", reply_markup=get_main_keyboard(update))
+            await query.edit_message_text("⛔ Full Package မရှိသေးပါ။", reply_markup=get_main_keyboard())
             return
         fixtures = get_today_fixtures()
         text = "📅 **ယနေ့ပွဲစဉ်များ (မြန်မာစံတော်ချိန်)**\n\n"
@@ -289,18 +270,16 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 except:
                     pass
             text += fixture + "\n\n"
-        await query.edit_message_text(text, reply_markup=get_main_keyboard(update))
+        await query.edit_message_text(text, reply_markup=get_main_keyboard())
 
-    # ---- ဒီနေ့ထီထွက်ရလဒ် ----
     elif data == "lottery_result":
         if not can_access(user_id, "lottery_result"):
-            await query.edit_message_text("⛔ Full Package မရှိသေးပါ။", reply_markup=get_main_keyboard(update))
+            await query.edit_message_text("⛔ Full Package မရှိသေးပါ။", reply_markup=get_main_keyboard())
             return
         res = get_lottery_results()
         text = f"📊 **ဒီနေ့ထီရလဒ်**\n🇹🇭 {res['thai']}\n🇱🇦 {res['laos']}\n📌 {res['source']}"
-        await query.edit_message_text(text, reply_markup=get_main_keyboard(update))
+        await query.edit_message_text(text, reply_markup=get_main_keyboard())
 
-    # ---- Premium Info ----
     elif data == "premium_info":
         caption = (
             "💎 **Premium Package များ**\n\n"
@@ -322,10 +301,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(caption, reply_markup=reply_markup, parse_mode="Markdown")
-
-# ---- Conversation Handlers for Adding Results ----
-# (ဒီနေရာမှာ Conversation Handler တွေကို ထည့်ရန် လိုအပ်ပါသည်။ သို့သော် စာလုံးအကန့်အသတ်ရှိသောကြောင့် ဆက်လက်ဖော်ပြရန် ခက်ခဲပါသည်။)
-# အောက်ပါအတိုင်း ဆက်လက်ရေးသားနိုင်ပါသည်။
 
 # ---- Admin Commands ----
 async def add_premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -352,6 +327,64 @@ async def remove_premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ User {uid} ကို ဖြုတ်လိုက်ပြီး။")
     except:
         await update.message.reply_text("❗ /removepremium <user_id>")
+
+# ---- Admin ထိုင်းထီရလဒ်ထည့်ရန် Command ----
+async def add_thai_result(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("⛔ Admin မဟုတ်ပါ။")
+        return
+    try:
+        args = ' '.join(context.args).split('|')
+        if len(args) < 2:
+            await update.message.reply_text(
+                "❗ ပုံစံမှားနေပါသည်။\n"
+                "ဥပမာ: `/addthai YYYY-MM-DD|1st|2nd|3rd|4th|5th|6th|7th|8th|9th|10th|11th|12th|13th|14th|15th|16th|17th|18th|19th|20th`"
+            )
+            return
+        
+        date_str = args[0]
+        datetime.strptime(date_str, "%Y-%m-%d")
+        
+        result_data = {"date": date_str}
+        for i, prize in enumerate(args[1:], 1):
+            if len(prize) == 6:  # ထိုင်းထီက ၆ လုံး
+                result_data[f"prize_{i}"] = prize
+            else:
+                result_data[f"prize_{i}"] = prize.zfill(6)
+        
+        save_full_thai_result(result_data)
+        await update.message.reply_text(f"✅ {date_str} ရက်စွဲအတွက် ထိုင်းထီရလဒ် {len(args)-1} ခု သိမ်းဆည်းပြီးပါပြီ။")
+    except Exception as e:
+        await update.message.reply_text(f"❗ အမှားရှိနေပါသည်။\nError: {str(e)}")
+
+# ---- Admin လာအိုထီရလဒ်ထည့်ရန် Command ----
+async def add_laos_result(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("⛔ Admin မဟုတ်ပါ။")
+        return
+    try:
+        args = ' '.join(context.args).split('|')
+        if len(args) < 2:
+            await update.message.reply_text(
+                "❗ ပုံစံမှားနေပါသည်။\n"
+                "ဥပမာ: `/addlaos YYYY-MM-DD|1st|2nd|3rd|4th|5th|6th|7th|8th|9th|10th|11th|12th|13th`"
+            )
+            return
+        
+        date_str = args[0]
+        datetime.strptime(date_str, "%Y-%m-%d")
+        
+        result_data = {"date": date_str}
+        for i, prize in enumerate(args[1:], 1):
+            if len(prize) == 4:  # လာအိုထီက ၄ လုံး
+                result_data[f"prize_{i}"] = prize
+            else:
+                result_data[f"prize_{i}"] = prize.zfill(4)
+        
+        save_full_laos_result(result_data)
+        await update.message.reply_text(f"✅ {date_str} ရက်စွဲအတွက် လာအိုထီရလဒ် {len(args)-1} ခု သိမ်းဆည်းပြီးပါပြီ။")
+    except Exception as e:
+        await update.message.reply_text(f"❗ အမှားရှိနေပါသည်။\nError: {str(e)}")
 
 async def add_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
@@ -410,20 +443,19 @@ async def search_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ---- Main ----
 def main():
-    # Health check server ကို Thread နဲ့ စတင်ပါ
     health_thread = threading.Thread(target=run_health_server, daemon=True)
     health_thread.start()
     
-    # Bot ကို Application နဲ့ စတင်ပါ
     application = Application.builder().token(BOT_TOKEN).build()
     
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("adminpanel", admin_panel))
     application.add_handler(CommandHandler("addpremium", add_premium))
     application.add_handler(CommandHandler("removepremium", remove_premium))
     application.add_handler(CommandHandler("addhistory", add_history))
     application.add_handler(CommandHandler("setresult", set_result))
     application.add_handler(CommandHandler("search", search_history))
+    application.add_handler(CommandHandler("addthai", add_thai_result))
+    application.add_handler(CommandHandler("addlaos", add_laos_result))
     application.add_handler(CallbackQueryHandler(button_handler))
     
     print("Bot is starting...")
