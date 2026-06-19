@@ -45,7 +45,7 @@ def can_access(user_id, feature):
         return True
     if feature == "laos" and pkg == "laos":
         return True
-    if feature in ["football", "fixtures", "lottery_result"]:
+    if feature in ["football", "fixtures", "lottery_result", "past_football"]:
         return pkg == "both"
     return False
 
