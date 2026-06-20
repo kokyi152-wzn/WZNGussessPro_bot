@@ -1,5 +1,6 @@
 import random
 import requests
+import re
 from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
 from config import FOOTBALL_API_KEY, ODDS_API_KEY, OPENWEATHER_API_KEY
@@ -16,7 +17,6 @@ def set_lottery_result_admin(thai_num, laos_num):
     _admin_lottery_cache["laos"] = laos_num
     _admin_lottery_cache["date"] = datetime.now().strftime("%Y-%m-%d")
 
-# ---- Team name mapping ----
 TEAM_NAMES = {
     "Manchester United": "မန်ယူ",
     "Arsenal": "အာဆင်နယ်",
@@ -47,10 +47,7 @@ TEAM_NAMES = {
 def get_team_name_mm(eng_name):
     return TEAM_NAMES.get(eng_name, eng_name)
 
-# ============================================
-# ⚽ ဘောလုံးခန့်မှန်းချက် (၉၀% မှန်ကန်နိုင်ခြေ)
-# ============================================
-
+# ---- ဘောလုံးခန့်မှန်း (၉၀%) ----
 TEAM_STRENGTH = {
     "မန်ယူ": 88, "အာဆင်နယ်": 85, "လီဗာပူး": 90, "မန်စီးတီး": 92,
     "ဘိုင်ယန်မြူးနစ်": 89, "ဒေါ့မွန်": 83, "ရီးရဲလ်": 91, "ဘာစီလိုနာ": 87,
@@ -71,7 +68,6 @@ HEAD_TO_HEAD = {
 def predict_football_match(home_team, away_team):
     home_strength = TEAM_STRENGTH.get(home_team, 75)
     away_strength = TEAM_STRENGTH.get(away_team, 75)
-    
     h2h = HEAD_TO_HEAD.get((home_team, away_team))
     if h2h:
         home_win_rate = h2h["home_wins"] / 5
@@ -79,20 +75,16 @@ def predict_football_match(home_team, away_team):
         draw_rate = h2h["draws"] / 5
     else:
         home_win_rate = 0.4; away_win_rate = 0.3; draw_rate = 0.3
-    
     home_condition = random.uniform(0.7, 1.0)
     away_condition = random.uniform(0.7, 1.0)
     home_advantage = 0.05
-    
     home_score = (home_strength / 100) * 0.4 + home_win_rate * 0.3 + home_condition * 0.2 + home_advantage
     away_score = (away_strength / 100) * 0.4 + away_win_rate * 0.3 + away_condition * 0.2
     draw_score = draw_rate * 0.3 + 0.1
-    
     total = home_score + away_score + draw_score
     home_percent = (home_score / total) * 100
     away_percent = (away_score / total) * 100
     draw_percent = (draw_score / total) * 100
-    
     if home_percent > away_percent and home_percent > draw_percent:
         return f"🏠 {home_team} နိုင်", f"{home_percent:.0f}%"
     elif away_percent > home_percent and away_percent > draw_percent:
@@ -118,21 +110,18 @@ def get_football_predictions():
                     prediction, confidence = predict_football_match(home_mm, away_mm)
                     matches.append(f"{home_mm} vs {away_mm} → {prediction} (ယုံကြည်မှု: {confidence})")
                 return matches
-        except Exception as e:
-            print(f"Football Prediction API Error: {e}")
-    
+        except:
+            pass
     mock_matches = [("မန်ယူ", "အာဆင်နယ်"), ("လီဗာပူး", "မန်စီးတီး"), ("ဘိုင်ယန်မြူးနစ်", "ဒေါ့မွန်"), ("ရီးရဲလ်", "ဘာစီလိုနာ"), ("ပီအက်စ်ဂျီ", "အိုလမ်ပစ်")]
     for home, away in mock_matches:
         prediction, confidence = predict_football_match(home, away)
         matches.append(f"{home} vs {away} → {prediction} (ယုံကြည်မှု: {confidence})")
     return matches
 
-# ---- ယနေ့ပွဲစဉ်စာရင်း ----
 def get_today_fixtures():
     today = datetime.now().strftime("%Y-%m-%d")
     tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
     matches = []
-    
     if FOOTBALL_API_KEY:
         try:
             url = f"https://api.football-data.org/v4/matches"
@@ -149,47 +138,38 @@ def get_today_fixtures():
                     time = m.get("utcDate", "N/A")[:16].replace("T", " ")
                     matches.append(f"🆚 {home_mm} vs {away_mm}\n   ⏰ {time} UTC")
                 return matches if matches else ["ယနေ့ပွဲစဉ် မရှိသေးပါ"]
-        except Exception as e:
-            print(f"Fixtures API Error: {e}")
-    
+        except:
+            pass
     mock = [("မန်ယူ", "အာဆင်နယ်", "20:00"), ("လီဗာပူး", "မန်စီးတီး", "22:00")]
     for home, away, t in mock:
         matches.append(f"🆚 {home} vs {away}\n   ⏰ မြန်မာချိန် {t}")
     return matches
 
-# ---- ပြီးခဲ့သော ၇ ရက်အတွင်း ဘောလုံးရလဒ်များ (ဇယားလေးနဲ့) ----
 def get_past_football_results():
     results = []
-    
     if FOOTBALL_API_KEY:
         try:
             from_date = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
             to_date = datetime.now().strftime("%Y-%m-%d")
-            
             url = "https://api.football-data.org/v4/matches"
             params = {"dateFrom": from_date, "dateTo": to_date, "status": "FINISHED", "limit": 20}
             headers = {"X-Auth-Token": FOOTBALL_API_KEY}
             resp = requests.get(url, headers=headers, params=params, timeout=10)
-            
             if resp.status_code == 200:
                 data = resp.json()
                 for match in data.get("matches", []):
                     home = match["homeTeam"]["name"]
                     away = match["awayTeam"]["name"]
                     date = match.get("utcDate", "").split("T")[0] if match.get("utcDate") else "N/A"
-                    
                     home_mm = get_team_name_mm(home)
                     away_mm = get_team_name_mm(away)
-                    
                     score = match.get("score", {})
                     fulltime = score.get("fullTime", {})
                     home_score = fulltime.get("home", "?")
                     away_score = fulltime.get("away", "?")
-                    
                     status = match.get("status", "FINISHED")
                     status_map = {"FINISHED": "✅ ပြီးဆုံး", "POSTPONED": "⏸ ရွှေ့ဆိုင်း", "CANCELLED": "❌ ဖျက်သိမ်း", "PAUSED": "⏸ ရပ်ထား", "IN_PLAY": "▶️ ကစားနေဆဲ"}
                     status_mm = status_map.get(status, status)
-                    
                     result_text = (
                         f"📅 {date}\n"
                         f"┌─────────────────────┐\n"
@@ -202,25 +182,17 @@ def get_past_football_results():
                         f"└─────────────────────┘"
                     )
                     results.append(result_text)
-                
                 return results if results else ["ပြီးခဲ့သော ၇ ရက်အတွင်း ဘောလုံးရလဒ်များ မရှိသေးပါ။"]
-        except Exception as e:
-            print(f"Past Football API Error: {e}")
-    
-    # Mock Data
+        except:
+            pass
     today = datetime.now()
     mock_results = []
     sample_results = [
-        ("မန်ယူ", "အာဆင်နယ်", 2, 1),
-        ("လီဗာပူး", "မန်စီးတီး", 3, 0),
-        ("ဘိုင်ယန်မြူးနစ်", "ဒေါ့မွန်", 1, 1),
-        ("ရီးရဲလ်", "ဘာစီလိုနာ", 2, 0),
-        ("ပီအက်စ်ဂျီ", "အိုလမ်ပစ်", 4, 2),
-        ("ချယ်လ်ဆီး", "တော့တင်ဟမ်", 1, 0),
-        ("အေစီမီလန်", "အင်တာမီလန်", 2, 2),
-        ("ဂျူဗင်တပ်", "နာပိုလီ", 3, 1),
-        ("အက်သလက်တို", "ဆီဗီလာ", 2, 1),
-        ("ရိုမာ", "လာဇီယို", 1, 0),
+        ("မန်ယူ", "အာဆင်နယ်", 2, 1), ("လီဗာပူး", "မန်စီးတီး", 3, 0),
+        ("ဘိုင်ယန်မြူးနစ်", "ဒေါ့မွန်", 1, 1), ("ရီးရဲလ်", "ဘာစီလိုနာ", 2, 0),
+        ("ပီအက်စ်ဂျီ", "အိုလမ်ပစ်", 4, 2), ("ချယ်လ်ဆီး", "တော့တင်ဟမ်", 1, 0),
+        ("အေစီမီလန်", "အင်တာမီလန်", 2, 2), ("ဂျူဗင်တပ်", "နာပိုလီ", 3, 1),
+        ("အက်သလက်တို", "ဆီဗီလာ", 2, 1), ("ရိုမာ", "လာဇီယို", 1, 0),
     ]
     for i, (home, away, h_score, a_score) in enumerate(sample_results[:10]):
         d = today - timedelta(days=i+1)
@@ -239,10 +211,7 @@ def get_past_football_results():
         mock_results.append(result_text)
     return mock_results
 
-# ============================================
-# 🇹🇭 ထိုင်းထီခန့်မှန်းချက် (၉၀% မှန်ကန်နိုင်ခြေ)
-# ============================================
-
+# ---- ထိုင်းထီခန့်မှန်း (၉၀%) ----
 def get_thai_lottery_predictions():
     predictions = []
     history = get_recent_history(30)
@@ -255,7 +224,6 @@ def get_thai_lottery_predictions():
                 freq[three_digit] = freq.get(three_digit, 0) + 1
     sorted_freq = sorted(freq.items(), key=lambda x: x[1], reverse=True)
     top_numbers = [num for num, count in sorted_freq[:20]]
-    
     used_numbers = set()
     for i in range(1, 6):
         if top_numbers and len(top_numbers) >= i:
@@ -284,10 +252,7 @@ def get_thai_lottery_predictions():
         predictions.append({"rank": i, "number": num, "confidence": confidence})
     return predictions
 
-# ============================================
-# 🇱🇦 လာအိုထီခန့်မှန်းချက် (၉၀% မှန်ကန်နိုင်ခြေ)
-# ============================================
-
+# ---- လာအိုထီခန့်မှန်း (၉၀%) ----
 def get_laos_lottery_predictions():
     predictions = []
     history = get_recent_history(30)
@@ -300,7 +265,6 @@ def get_laos_lottery_predictions():
                 freq[two_digit] = freq.get(two_digit, 0) + 1
     sorted_freq = sorted(freq.items(), key=lambda x: x[1], reverse=True)
     top_numbers = [num for num, count in sorted_freq[:20]]
-    
     used_numbers = set()
     for i in range(1, 6):
         if top_numbers and len(top_numbers) >= i:
@@ -329,7 +293,7 @@ def get_laos_lottery_predictions():
         predictions.append({"rank": i, "number": num, "confidence": confidence})
     return predictions
 
-# ---- ထိုင်းထီကလင်ဒါ ----
+# ---- ကလင်ဒါများ ----
 def get_thai_calendar():
     today = datetime.now()
     dates = []
@@ -343,7 +307,6 @@ def get_thai_calendar():
                 pass
     return dates[:6]
 
-# ---- လာအိုထီကလင်ဒါ ----
 def get_laos_calendar():
     today = datetime.now()
     dates = []
@@ -384,12 +347,58 @@ def get_lottery_results():
         "source": "📊 ကျွမ်းကျင်သူများ၏ ခန့်မှန်းချက်"
     }
 
-# ============================================
-# 🔍 လာအိုထီရလဒ် အလိုအလျောက်ရှာဖွေခြင်း
-# ============================================
+# ---- 🆕 ထိုင်းထီရလဒ် API ကနေ ရယူခြင်း ----
+def fetch_thai_lottery_from_api():
+    """
+    Thai Lottery JSON API ကနေ နောက်ဆုံးထွက်ရလဒ်ကို ရယူမယ်
+    """
+    try:
+        url = "https://lotto.api.rayriffy.com/latest"
+        response = requests.get(url, timeout=15)
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("status") == "success":
+                result = data.get("response", {})
+                prizes = result.get("prizes", [])
+                lottery_data = {
+                    "date": result.get("date", datetime.now().strftime("%Y-%m-%d")),
+                    "prizes": {}
+                }
+                for prize in prizes:
+                    prize_id = prize.get("id", "")
+                    numbers = prize.get("number", [])
+                    if numbers:
+                        lottery_data["prizes"][prize_id] = numbers[0] if numbers else ""
+                thai_data = {
+                    "date": lottery_data["date"],
+                    "prize_1": lottery_data["prizes"].get("prizeFirst", ""),
+                    "prize_2": lottery_data["prizes"].get("prizeSecond", ""),
+                    "prize_3": lottery_data["prizes"].get("prizeThrid", ""),
+                    "prize_4": lottery_data["prizes"].get("prizeForth", ""),
+                    "prize_5": lottery_data["prizes"].get("prizeFifth", ""),
+                    "prize_6": lottery_data["prizes"].get("prizeSixth", ""),
+                    "prize_7": lottery_data["prizes"].get("prizeSeventh", ""),
+                    "prize_8": lottery_data["prizes"].get("prizeEighth", ""),
+                    "prize_9": lottery_data["prizes"].get("prizeNinth", ""),
+                    "prize_10": lottery_data["prizes"].get("prizeTenth", ""),
+                    "prize_11": lottery_data["prizes"].get("prizeEleventh", ""),
+                    "prize_12": lottery_data["prizes"].get("prizeTwelfth", ""),
+                    "prize_13": lottery_data["prizes"].get("prizeThirteenth", ""),
+                    "prize_14": lottery_data["prizes"].get("prizeFourteenth", ""),
+                    "prize_15": lottery_data["prizes"].get("prizeFifteenth", ""),
+                    "prize_16": lottery_data["prizes"].get("prizeSixteenth", ""),
+                    "prize_17": lottery_data["prizes"].get("prizeSeventeenth", ""),
+                    "prize_18": lottery_data["prizes"].get("prizeEighteenth", ""),
+                    "prize_19": lottery_data["prizes"].get("prizeNineteenth", ""),
+                    "prize_20": lottery_data["prizes"].get("prizeTwentieth", ""),
+                }
+                return thai_data
+    except Exception as e:
+        print(f"Thai Lottery API Error: {e}")
+    return None
 
+# ---- လာအိုထီရလဒ် အလိုအလျောက်ရှာဖွေခြင်း ----
 def fetch_laos_lottery_from_web():
-    """လာအိုထီရလဒ်တွေကို ဝဘ်ဆိုဒ်များမှ အလိုအလျောက်ရှာဖွေပြီး ပြန်ပေးမယ်"""
     results = []
     try:
         url = "https://www.glomyanmar.com/category/laos-lottery/"
@@ -417,7 +426,6 @@ def fetch_laos_lottery_from_web():
                         results.append(result_data)
     except Exception as e:
         print(f"glomyanmar Scraping Error: {e}")
-    
     if not results:
         today = datetime.now().strftime("%Y-%m-%d")
         mock_data = {"date": today}
@@ -428,7 +436,6 @@ def fetch_laos_lottery_from_web():
     return results
 
 def auto_save_laos_result():
-    """လာအိုထီရလဒ်ကို အလိုအလျောက်ရှာဖွေပြီး Database ထဲသိမ်းမယ်"""
     results = fetch_laos_lottery_from_web()
     if results:
         for result in results:
