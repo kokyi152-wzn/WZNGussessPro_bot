@@ -14,7 +14,7 @@ from predictions import (
     get_thai_lottery_predictions, get_laos_lottery_predictions,
     get_thai_calendar, get_laos_calendar,
     get_lottery_results, set_lottery_result_admin, LotteryPredictor, FootballPredictor,
-    get_past_football_results, auto_save_laos_result
+    get_past_football_results, auto_save_laos_result, fetch_thai_lottery_from_api
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -51,6 +51,7 @@ def run_health_server():
 # ---- Scheduler ----
 def start_scheduler():
     scheduler = BackgroundScheduler()
+    # လာအိုထီ - တနင်္လာကနေ သောကြာ ညနေ ၆ နာရီ
     scheduler.add_job(auto_save_laos_result, 'cron', day_of_week='mon-fri', hour=18, minute=0, id='laos_lottery_job')
     scheduler.start()
     print("✅ Scheduler started")
@@ -75,6 +76,8 @@ def get_admin_keyboard():
     keyboard = [
         [InlineKeyboardButton("📝 ထိုင်းထီရလဒ်ထည့်ရန်", callback_data="admin_add_thai")],
         [InlineKeyboardButton("📝 လာအိုထီရလဒ်ထည့်ရန်", callback_data="admin_add_laos")],
+        [InlineKeyboardButton("📥 ထိုင်းထီရလဒ်ရယူရန်", callback_data="admin_fetch_thai")],
+        [InlineKeyboardButton("📥 လာအိုထီရလဒ်ရယူရန်", callback_data="admin_fetch_laos")],
         [InlineKeyboardButton("📋 ထိုင်းထီရလဒ်ကြည့်ရန်", callback_data="admin_view_thai")],
         [InlineKeyboardButton("📋 လာအိုထီရလဒ်ကြည့်ရန်", callback_data="admin_view_laos")],
         [InlineKeyboardButton("📊 ပြီးခဲ့သော ဘောလုံးရလဒ်များ", callback_data="past_football_admin")],
@@ -103,6 +106,33 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ---- Admin Back ----
     if data == "admin_back":
         await query.edit_message_text("👑 Admin Menu", reply_markup=get_admin_keyboard())
+        return
+
+    # ---- Admin Fetch Thai ----
+    if data == "admin_fetch_thai":
+        if user_id != ADMIN_ID:
+            await query.edit_message_text("⛔ သင်သည် Admin မဟုတ်ပါ။")
+            return
+        await query.edit_message_text("⏳ ထိုင်းထီရလဒ်ကို ရှာဖွေနေပါသည်...")
+        result = fetch_thai_lottery_from_api()
+        if result:
+            save_full_thai_result(result)
+            await query.edit_message_text(f"✅ ထိုင်းထီရလဒ် {result['date']} ကို သိမ်းဆည်းပြီးပါပြီ။", reply_markup=get_admin_keyboard())
+        else:
+            await query.edit_message_text("❌ ထိုင်းထီရလဒ် ရယူရာတွင် အမှားရှိပါသည်။", reply_markup=get_admin_keyboard())
+        return
+
+    # ---- Admin Fetch Laos ----
+    if data == "admin_fetch_laos":
+        if user_id != ADMIN_ID:
+            await query.edit_message_text("⛔ သင်သည် Admin မဟုတ်ပါ။")
+            return
+        await query.edit_message_text("⏳ လာအိုထီရလဒ်ကို ရှာဖွေနေပါသည်...")
+        success = auto_save_laos_result()
+        if success:
+            await query.edit_message_text("✅ လာအိုထီရလဒ် အလိုအလျောက် သိမ်းဆည်းပြီးပါပြီ။", reply_markup=get_admin_keyboard())
+        else:
+            await query.edit_message_text("❌ လာအိုထီရလဒ် ရယူရာတွင် အမှားရှိပါသည်။", reply_markup=get_admin_keyboard())
         return
 
     # ---- Admin Add Thai ----
