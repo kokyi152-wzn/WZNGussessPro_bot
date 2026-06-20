@@ -9,7 +9,6 @@ history_collection = db["lottery_history"]
 thai_result_collection = db["thai_full_results"]
 laos_result_collection = db["laos_full_results"]
 
-# ---- User Functions ----
 def add_user(user_id, username, first_name):
     if not users_collection.find_one({"user_id": user_id}):
         users_collection.insert_one({
@@ -36,7 +35,6 @@ def get_package(user_id):
     return "free"
 
 def can_access(user_id, feature):
-    # 👑 Admin ဆိုရင် အကုန်ကြည့်ခွင့်ပြုမယ်
     if user_id == ADMIN_ID:
         return True
     pkg = get_package(user_id)
@@ -50,7 +48,6 @@ def can_access(user_id, feature):
         return pkg == "both"
     return False
 
-# ---- History Functions ----
 def save_history(date, thai_num, laos_num):
     history_collection.update_one(
         {"date": date},
@@ -79,7 +76,6 @@ def get_history_by_weeks(weeks=4):
     cutoff_str = cutoff_date.strftime("%Y-%m-%d")
     return list(history_collection.find({"date": {"$gte": cutoff_str}}).sort("date", -1))
 
-# ---- Thai Full Result Functions ----
 def save_full_thai_result(data):
     thai_result_collection.update_one(
         {"date": data["date"]},
@@ -93,7 +89,6 @@ def get_full_thai_result():
 def get_full_thai_result_by_date(date):
     return thai_result_collection.find_one({"date": date})
 
-# ---- Laos Full Result Functions ----
 def save_full_laos_result(data):
     laos_result_collection.update_one(
         {"date": data["date"]},
