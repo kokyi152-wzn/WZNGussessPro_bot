@@ -82,24 +82,6 @@ def get_admin_keyboard():
     ]
     return InlineKeyboardMarkup(keyboard)
 
-# ---- Admin Sub Keyboard (ထိုင်းထီရလဒ်ထည့်ရန်) ----
-def get_admin_add_thai_keyboard():
-    keyboard = [
-        [InlineKeyboardButton("📅 ယနေ့ရက်စွဲထည့်ရန်", callback_data="admin_add_thai_today")],
-        [InlineKeyboardButton("📅 ရက်စွဲကိုယ်တိုင်ထည့်ရန်", callback_data="admin_add_thai_custom")],
-        [InlineKeyboardButton("🔙 နောက်သို့", callback_data="admin_back")]
-    ]
-    return InlineKeyboardMarkup(keyboard)
-
-# ---- Admin Sub Keyboard (လာအိုထီရလဒ်ထည့်ရန်) ----
-def get_admin_add_laos_keyboard():
-    keyboard = [
-        [InlineKeyboardButton("📅 ယနေ့ရက်စွဲထည့်ရန်", callback_data="admin_add_laos_today")],
-        [InlineKeyboardButton("📅 ရက်စွဲကိုယ်တိုင်ထည့်ရန်", callback_data="admin_add_laos_custom")],
-        [InlineKeyboardButton("🔙 နောက်သို့", callback_data="admin_back")]
-    ]
-    return InlineKeyboardMarkup(keyboard)
-
 # ---- /start ----
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
