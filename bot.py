@@ -51,7 +51,6 @@ def run_health_server():
 # ---- Scheduler ----
 def start_scheduler():
     scheduler = BackgroundScheduler()
-    # လာအိုထီ - တနင်္လာကနေ သောကြာ ညနေ ၆ နာရီ
     scheduler.add_job(auto_save_laos_result, 'cron', day_of_week='mon-fri', hour=18, minute=0, id='laos_lottery_job')
     scheduler.start()
     print("✅ Scheduler started")
@@ -221,7 +220,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ---- User Past Football ----
     if data == "past_football":
-        if not can_access(user_id, "past_football"):
+        # Admin ဆိုရင် အကုန်ကြည့်ခွင့်ပြုမယ်
+        if user_id != ADMIN_ID and not can_access(user_id, "past_football"):
             await query.edit_message_text("⛔ Full Package မရှိသေးပါ။", reply_markup=get_main_keyboard())
             return
         results = get_past_football_results()
@@ -232,12 +232,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text += f"{result}\n\n"
         else:
             text += "📭 ပြီးခဲ့သော ၇ ရက်အတွင်း ဘောလုံးရလဒ်များ မရှိသေးပါ။"
-        await query.edit_message_text(text, reply_markup=get_main_keyboard())
+        await query.edit_message_text(text, reply_markup=get_main_keyboard() if user_id != ADMIN_ID else get_admin_keyboard())
         return
 
-    # ---- User Features ----
+    # ---- User Features (Admin ဆိုရင် အကုန်ကြည့်ခွင့်ပြုမယ်) ----
     if data == "lottery_thai":
-        if not can_access(user_id, "thai"):
+        if user_id != ADMIN_ID and not can_access(user_id, "thai"):
             await query.edit_message_text("⛔ ထိုင်းထီ Package မရှိသေးပါ။", reply_markup=get_main_keyboard())
             return
         predictions = get_thai_lottery_predictions()
@@ -246,11 +246,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for p in predictions:
             emoji = "🥇" if p["rank"] == 1 else "🥈" if p["rank"] == 2 else "🥉" if p["rank"] == 3 else f"#{p['rank']}"
             text += f"{emoji} `{p['number']}` (၆လုံး) - ယုံကြည်မှု: {p['confidence']}\n"
-        await query.edit_message_text(text, reply_markup=get_main_keyboard())
+        await query.edit_message_text(text, reply_markup=get_main_keyboard() if user_id != ADMIN_ID else get_admin_keyboard())
         return
 
     if data == "lottery_laos":
-        if not can_access(user_id, "laos"):
+        if user_id != ADMIN_ID and not can_access(user_id, "laos"):
             await query.edit_message_text("⛔ လာအိုထီ Package မရှိသေးပါ။", reply_markup=get_main_keyboard())
             return
         predictions = get_laos_lottery_predictions()
@@ -259,20 +259,20 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for p in predictions:
             emoji = "🥇" if p["rank"] == 1 else "🥈" if p["rank"] == 2 else "🥉" if p["rank"] == 3 else f"#{p['rank']}"
             text += f"{emoji} `{p['number']}` (၄လုံး) - ယုံကြည်မှု: {p['confidence']}\n"
-        await query.edit_message_text(text, reply_markup=get_main_keyboard())
+        await query.edit_message_text(text, reply_markup=get_main_keyboard() if user_id != ADMIN_ID else get_admin_keyboard())
         return
 
     if data == "football":
-        if not can_access(user_id, "football"):
+        if user_id != ADMIN_ID and not can_access(user_id, "football"):
             await query.edit_message_text("⛔ Full Package မရှိသေးပါ။", reply_markup=get_main_keyboard())
             return
         preds = get_football_predictions()
         text = "⚽ **ဘောလုံးခန့်မှန်း**\n" + "\n".join(preds)
-        await query.edit_message_text(text, reply_markup=get_main_keyboard())
+        await query.edit_message_text(text, reply_markup=get_main_keyboard() if user_id != ADMIN_ID else get_admin_keyboard())
         return
 
     if data == "fixtures":
-        if not can_access(user_id, "fixtures"):
+        if user_id != ADMIN_ID and not can_access(user_id, "fixtures"):
             await query.edit_message_text("⛔ Full Package မရှိသေးပါ။", reply_markup=get_main_keyboard())
             return
         fixtures = get_today_fixtures()
@@ -290,11 +290,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 except:
                     pass
             text += fixture + "\n\n"
-        await query.edit_message_text(text, reply_markup=get_main_keyboard())
+        await query.edit_message_text(text, reply_markup=get_main_keyboard() if user_id != ADMIN_ID else get_admin_keyboard())
         return
 
     if data == "calendar_thai":
-        if not can_access(user_id, "thai"):
+        if user_id != ADMIN_ID and not can_access(user_id, "thai"):
             await query.edit_message_text("⛔ ထိုင်းထီ Package မရှိသေးပါ။", reply_markup=get_main_keyboard())
             return
         dates = get_thai_calendar()
@@ -310,11 +310,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if len(thai_num) < 6:
                     thai_num = thai_num.zfill(6)
                 text += f"📅 {h['date']} → `{thai_num}`\n"
-        await query.edit_message_text(text, reply_markup=get_main_keyboard())
+        await query.edit_message_text(text, reply_markup=get_main_keyboard() if user_id != ADMIN_ID else get_admin_keyboard())
         return
 
     if data == "calendar_laos":
-        if not can_access(user_id, "laos"):
+        if user_id != ADMIN_ID and not can_access(user_id, "laos"):
             await query.edit_message_text("⛔ လာအိုထီ Package မရှိသေးပါ။", reply_markup=get_main_keyboard())
             return
         dates = get_laos_calendar()
@@ -330,16 +330,16 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if len(laos_num) < 4:
                     laos_num = laos_num.zfill(4)
                 text += f"📅 {h['date']} → `{laos_num}`\n"
-        await query.edit_message_text(text, reply_markup=get_main_keyboard())
+        await query.edit_message_text(text, reply_markup=get_main_keyboard() if user_id != ADMIN_ID else get_admin_keyboard())
         return
 
     if data == "lottery_result":
-        if not can_access(user_id, "lottery_result"):
+        if user_id != ADMIN_ID and not can_access(user_id, "lottery_result"):
             await query.edit_message_text("⛔ Full Package မရှိသေးပါ။", reply_markup=get_main_keyboard())
             return
         res = get_lottery_results()
         text = f"📊 **ဒီနေ့ထီရလဒ်**\n🇹🇭 {res['thai']}\n🇱🇦 {res['laos']}\n📌 {res['source']}"
-        await query.edit_message_text(text, reply_markup=get_main_keyboard())
+        await query.edit_message_text(text, reply_markup=get_main_keyboard() if user_id != ADMIN_ID else get_admin_keyboard())
         return
 
     if data == "premium_info":
