@@ -36,6 +36,7 @@ def get_package(user_id):
     return "free"
 
 def can_access(user_id, feature):
+    # 👑 Admin ဆိုရင် အကုန်ကြည့်ခွင့်ပြုမယ်
     if user_id == ADMIN_ID:
         return True
     pkg = get_package(user_id)
